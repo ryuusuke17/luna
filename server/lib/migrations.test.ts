@@ -1,0 +1,15 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import Database from "better-sqlite3";
+import {mkdtempSync,rmSync} from "node:fs";
+import {tmpdir} from "node:os";
+import {join} from "node:path";
+const directory=mkdtempSync(join(tmpdir(),"luna-migration-")),path=join(directory,"fixture.sqlite"),backup=join(directory,"backup.sqlite");
+const original=new Database(path);
+original.exec("CREATE TABLE users(id INTEGER PRIMARY KEY,username TEXT UNIQUE NOT NULL,password_hash TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP); CREATE TABLE accounts(id INTEGER PRIMARY KEY,owner_id INTEGER REFERENCES users(id),name TEXT NOT NULL,type TEXT NOT NULL,liquid INTEGER NOT NULL DEFAULT 0,opening_date TEXT NOT NULL,archived_at TEXT,last4 TEXT,credit_limit INTEGER,reconciled_through TEXT); CREATE TABLE categories(id INTEGER PRIMARY KEY,owner_id INTEGER REFERENCES users(id),name TEXT NOT NULL,kind TEXT NOT NULL,archived_at TEXT); CREATE TABLE transactions(id INTEGER PRIMARY KEY,owner_id INTEGER REFERENCES users(id),kind TEXT NOT NULL,posted_date TEXT NOT NULL,amount INTEGER NOT NULL,account_id INTEGER REFERENCES accounts(id),counter_account_id INTEGER REFERENCES accounts(id),category_id INTEGER REFERENCES categories(id),description TEXT NOT NULL DEFAULT '',link_group TEXT,replaces_id INTEGER REFERENCES transactions(id),voided_at TEXT,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP); CREATE TABLE account_entries(id INTEGER PRIMARY KEY,transaction_id INTEGER NOT NULL REFERENCES transactions(id),account_id INTEGER NOT NULL REFERENCES accounts(id),delta INTEGER NOT NULL); INSERT INTO users VALUES(1,'fixture','hash',CURRENT_TIMESTAMP); INSERT INTO accounts(id,owner_id,name,type,opening_date) VALUES(1,1,'Existing','bank','2025-01-01'); INSERT INTO transactions(id,owner_id,kind,posted_date,amount,account_id,description) VALUES(1,1,'opening','2025-01-01',12345,1,'Preserved'); INSERT INTO account_entries VALUES(1,1,1,12345);");
+await original.backup(backup);original.close();
+const restored=new Database(backup);assert.equal(restored.pragma("integrity_check",{simple:true}),"ok");assert.equal(restored.prepare("SELECT delta FROM account_entries").get()?.delta,12345);restored.close();
+process.env.LUNA_DB_PATH=path;
+const {db}=await import("./db.ts");
+test("additive migration preserves existing ledger; verified backup stays unchanged",()=>{assert.equal(db.pragma("integrity_check",{simple:true}),"ok");assert.equal(db.prepare("SELECT description,amount FROM transactions WHERE id=1").get()?.amount,12345);assert.equal(db.prepare("SELECT name FROM accounts WHERE id=1").get()?.name,"Existing");assert.equal(db.prepare("SELECT delta FROM account_entries").get()?.delta,12345);assert.ok((db.pragma("table_info(transactions)") as {name:string}[]).some(c=>c.name==="merchant"));assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE name='bills'").get());const snapshot=new Database(backup);assert.ok(!(snapshot.pragma("table_info(transactions)") as {name:string}[]).some(c=>c.name==="merchant"));snapshot.close();});
+test.after(()=>{db.close();rmSync(directory,{recursive:true,force:true});});

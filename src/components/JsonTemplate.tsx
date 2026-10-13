@@ -52,10 +52,12 @@ const template = {
 const json = `${JSON.stringify(template, null, 2)}\n`;
 
 export default function JsonTemplate() {
+  const [busy,setBusy]=useState(false);
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState(false);
 
   async function copyTemplate() {
+    if(busy)return;setBusy(true);
     try {
       await navigator.clipboard.writeText(json);
       setCopyError(false);
@@ -64,7 +66,7 @@ export default function JsonTemplate() {
     } catch {
       setCopyError(true);
       setCopied(false);
-    }
+    } finally{setBusy(false);}
   }
 
   function downloadTemplate() {
@@ -84,7 +86,7 @@ export default function JsonTemplate() {
           <p className="mt-1 text-sm text-muted-foreground">Copy or download, then replace the example values with your statement data.</p>
         </div>
         <div className="flex gap-2">
-          <button type="button" onClick={copyTemplate} className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold hover:bg-muted" aria-live="polite">
+          <button type="button" disabled={busy} aria-busy={busy} onClick={copyTemplate} className="inline-flex min-h-11 items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold hover:bg-muted" aria-live="polite">
             {copied ? <Check size={16} /> : <Copy size={16} />}
             {copied ? "Copied" : "Copy JSON"}
           </button>
@@ -93,7 +95,7 @@ export default function JsonTemplate() {
           </button>
         </div>
       </div>
-      <pre className="max-h-96 overflow-auto bg-muted/40 p-5 text-xs leading-relaxed text-foreground"><code>{json}</code></pre>
+      <pre tabIndex={0} role="region" aria-label="JSON template, scrollable" className="max-h-96 overflow-auto bg-muted/40 p-5 text-xs leading-relaxed text-foreground"><code>{json}</code></pre>
       <p className="px-5 pb-4 text-xs text-muted-foreground">Amounts use decimal strings. Supported transaction types: purchase, refund, payment, fee, interest.</p>
       {copyError && <p role="alert" className="px-5 pb-4 text-sm text-destructive">Clipboard access unavailable. Use Download instead.</p>}
     </section>

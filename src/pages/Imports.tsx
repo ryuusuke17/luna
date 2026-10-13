@@ -1,5 +1,8 @@
-import { useEffect, useRef, useState } from "react";
-import AppLayout from "@/components/AppLayout";
+import {Link} from "react-router-dom";
+import {useQuery,useQueryClient} from "@tanstack/react-query";
+import {Tabs,TabsList,TabsTrigger,TabsContent} from "@/components/ui/tabs";
+import CsvImport from "@/components/CsvImport";
+import { useRef, useState } from "react";
 import JsonTemplate from "@/components/JsonTemplate";
 import { api, send } from "@/lib/api";
 import { formatMoney } from "@/lib/finance";
@@ -16,54 +19,64 @@ function validPreview(value: unknown): value is Statement {
 }
 
 export default function Imports() {
-  const [accounts, setAccounts] = useState<Account[]>([]), [categories, setCategories] = useState<Category[]>([]), [card, setCard] = useState(""), [statement, setStatement] = useState<Statement | null>(null), [categoryMap, setCategoryMap] = useState<Record<string, string>>({}), [paymentMap, setPaymentMap] = useState<Record<string, string>>({}), [error, setError] = useState(""), [result, setResult] = useState<any>(null), [busy, setBusy] = useState(false), fileInput = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    Promise.all([api<Account[]>("accounts"), api<Category[]>("categories")]).then(([a, c]) => { setAccounts(a); setCategories(c); }).catch(e => setError(e.message));
-  }, []);
+  const client=useQueryClient(),[mode,setMode]=useState("json"),[allowDuplicates,setAllowDuplicates]=useState(false),[csvBusy,setCsvBusy]=useState(false);
+  const history=useQuery({queryKey:["import-history"],queryFn:()=>api<{id:number;format:string;account_name:string;rows:number;created_at:string}[]>("import-history")});
+  const accountQuery=useQuery({queryKey:["accounts"],queryFn:()=>api<Account[]>("accounts")}),categoryQuery=useQuery({queryKey:["categories"],queryFn:()=>api<Category[]>("categories")});
+  const accounts=accountQuery.data??[],categories=categoryQuery.data??[];
+  const  [card, setCard] = useState(""), [statement, setStatement] = useState<Statement | null>(null), [categoryMap, setCategoryMap] = useState<Record<string, string>>({}), [paymentMap, setPaymentMap] = useState<Record<string, string>>({}), [error, setError] = useState(""), [result, setResult] = useState<any>(null), [busy, setBusy] = useState(false), fileInput = useRef<HTMLInputElement>(null);
 
   async function choose(file?: File) {
-    setError(""); setResult(null); setStatement(null);
+    if(busy)return;setAllowDuplicates(false);setError(""); setResult(null); setStatement(null);
     if (!file) return;
     if (file.size > 2_000_000) { setError("JSON file exceeds 2 MB"); return; }
+    setBusy(true);
     try {
       const value: unknown = JSON.parse(await file.text());
       if (!validPreview(value)) throw Error("Invalid statement JSON v1");
       const s = value;
+      await send("imports",{action:"preview",statement:s});
       setStatement(s);
-      setCategoryMap(Object.fromEntries(s.transactions.map((r, i) => [String(i), String(categories.find(c => c.kind === "expense" && c.name.toLowerCase() === r.category_hint?.toLowerCase())?.id ?? "")])));
+      const rules=await api<{phrase:string;category_id:number;kind:string;enabled:number;priority:number;id:number}[]>("merchant-rules");
+      setCategoryMap(Object.fromEntries(s.transactions.map((r,i)=>{const hint=categories.find(c=>c.kind==="expense"&&c.name.trim().toLowerCase()===r.category_hint?.trim().toLowerCase()),rule=rules.filter(r=>r.enabled&&r.kind==="expense").sort((a,b)=>a.priority-b.priority||a.id-b.id).find(rule=>categories.some(c=>c.id===rule.category_id&&c.kind==="expense")&&(r.merchant??"").trim().toLowerCase().includes(rule.phrase.trim().toLowerCase()));return [String(i),String(hint?.id??rule?.category_id??"")];})));
       setPaymentMap({});
-    } catch (e) { setError(e instanceof Error ? e.message : "Invalid JSON file"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "Invalid JSON file"); } finally{setBusy(false);}
   }
 
   async function commit() {
-    if (!statement || !card) return;
+    if (!statement || !card || busy) return;
     setBusy(true); setError("");
     try {
-      setResult(await send("imports", { accountId: Number(card), statement, categoryMap: Object.fromEntries(Object.entries(categoryMap).map(([k, v]) => [k, Number(v)])), paymentMap: Object.fromEntries(Object.entries(paymentMap).map(([k, v]) => [k, Number(v)])) }));
+      setResult(await send("imports", { accountId: Number(card), statement, allowDuplicates, categoryMap: Object.fromEntries(Object.entries(categoryMap).map(([k, v]) => [k, Number(v)])), paymentMap: Object.fromEntries(Object.entries(paymentMap).map(([k, v]) => [k, Number(v)])) }));
+      client.invalidateQueries();
       setStatement(null); setCategoryMap({}); setPaymentMap({});
       if (fileInput.current) fileInput.current.value = "";
     } catch (e) { setError(e instanceof Error ? e.message : "Import failed"); }
     finally { setBusy(false); }
   }
 
-  return <AppLayout>
-    <header className="mb-8"><p className="text-sm font-semibold uppercase tracking-widest text-primary">Statement review</p><h1 className="mt-2 text-3xl font-bold">JSON import</h1><p className="mt-2 text-muted-foreground">Review rows before saving. Files stay in memory and are not stored.</p></header>
+  return <>
+    <header className="mb-8"><p className="text-sm font-semibold uppercase tracking-widest text-primary">Statement review</p><h1 className="mt-2 text-3xl font-bold">Imports</h1><p className="mt-2 text-muted-foreground">Review rows before saving. Files stay in memory and are not stored.</p></header>
+    <Tabs value={mode} onValueChange={setMode}><TabsList className="mb-5 h-auto"><TabsTrigger disabled={csvBusy} className="min-h-11" value="json">JSON statements</TabsTrigger><TabsTrigger disabled={busy} className="min-h-11" value="csv">CSV template</TabsTrigger></TabsList><TabsContent value={mode}>
+    {mode==="csv"?<CsvImport onBusyChange={setCsvBusy}/>:<div>
     <section className="grid gap-4 rounded-3xl border bg-card p-5 sm:grid-cols-2">
-      <label className="text-sm font-semibold">Credit card<select value={card} onChange={e => setCard(e.target.value)} className="mt-2 h-11 w-full rounded-xl border bg-background px-3"><option value="">Select account</option>{accounts.filter(a => a.type === "credit_card").map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
-      <label className="text-sm font-semibold">Statement JSON<input ref={fileInput} type="file" accept="application/json,.json" onChange={e => choose(e.target.files?.[0])} className="mt-2 block w-full text-sm" /></label>
+      <label className="text-sm font-semibold">Credit card<select disabled={busy} value={card} onChange={e => setCard(e.target.value)} className="mt-2 h-11 w-full rounded-xl border bg-background px-3"><option value="">Select account</option>{accounts.filter(a => a.type === "credit_card").map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
+      <label className="text-sm font-semibold" onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();if(!busy)choose(e.dataTransfer.files[0]);}}>Choose or drop statement JSON<input ref={fileInput} disabled={busy} type="file" accept="application/json,.json" onChange={e => choose(e.target.files?.[0])} className="mt-2 block w-full text-sm" /></label>
     </section>
+    {accountQuery.isPending||categoryQuery.isPending?<p role="status" className="mt-3">Loading accounts/categories…</p>:accountQuery.error||categoryQuery.error?<p role="alert" className="mt-3 text-destructive">{(accountQuery.error??categoryQuery.error)?.message}</p>:!accounts.some(a=>a.type==="credit_card")||!categories.some(c=>c.kind==="expense")?<p className="mt-3">Set up a credit card in <Link className="underline" to="/accounts">Accounts</Link> and expense categories in <Link className="underline" to="/settings">Settings</Link> first.</p>:null}
     <JsonTemplate />
     {statement && <section className="my-5 rounded-3xl border bg-card p-5">
       <h2 className="font-bold">{statement.statement_id} · {statement.account_key}</h2>
       <p className="mt-1 text-sm text-muted-foreground">{statement.period.start} — {statement.period.end} · {statement.transactions.length} rows · closing debt {statement.closing_balance} PHP</p>
       <div className="mt-4 divide-y">{statement.transactions.map((r, i) => <article key={`${r.source_id ?? i}-${i}`} className="grid gap-3 py-4 sm:grid-cols-[1fr_auto]">
         <div><p className="font-semibold">{r.description || r.merchant || r.type}</p><p className="text-sm text-muted-foreground">{r.posted_date} · {r.type} · PHP {r.amount}{r.source_id ? ` · ${r.source_id}` : ""}</p></div>
-        {["purchase", "refund", "fee", "interest"].includes(r.type) ? <label className="text-sm">Category<select value={categoryMap[String(i)] ?? ""} onChange={e => setCategoryMap(m => ({ ...m, [String(i)]: e.target.value }))} className="mt-1 h-10 w-full rounded-xl border bg-background px-3"><option value="">Choose category</option>{categories.filter(c => c.kind === "expense").map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label> : r.type === "payment" ? <label className="text-sm">Paid from<select value={paymentMap[String(i)] ?? ""} onChange={e => setPaymentMap(m => ({ ...m, [String(i)]: e.target.value }))} className="mt-1 h-10 w-full rounded-xl border bg-background px-3"><option value="">Choose funding account</option>{accounts.filter(a => a.id !== Number(card) && a.type !== "credit_card").map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label> : null}
+        {["purchase", "refund", "fee", "interest"].includes(r.type) ? <label className="text-sm">Category<select disabled={busy} value={categoryMap[String(i)] ?? ""} onChange={e => setCategoryMap(m => ({ ...m, [String(i)]: e.target.value }))} className="mt-1 h-10 w-full rounded-xl border bg-background px-3"><option value="">Choose category</option>{categories.filter(c => c.kind === "expense").map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label> : r.type === "payment" ? <label className="text-sm">Paid from<select disabled={busy} value={paymentMap[String(i)] ?? ""} onChange={e => setPaymentMap(m => ({ ...m, [String(i)]: e.target.value }))} className="mt-1 h-10 w-full rounded-xl border bg-background px-3"><option value="">Choose funding account</option>{accounts.filter(a => a.id !== Number(card) && ["cash","bank","wallet"].includes(a.type)).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label> : null}
       </article>)}</div>
-      <div className="flex gap-3"><button disabled={!card || busy || Boolean(result)} onClick={commit} className="mt-4 rounded-xl bg-primary px-5 py-3 font-semibold text-primary-foreground disabled:opacity-50">{busy ? "Importing…" : result ? "Imported" : "Confirm and import"}</button><button disabled={busy} onClick={() => { setStatement(null); setCategoryMap({}); setPaymentMap({}); if (fileInput.current) fileInput.current.value = ""; }} className="mt-4 rounded-xl border px-5 py-3">Cancel</button></div>
+      <label className="mt-4 flex min-h-11 items-center gap-3"><input className="size-6" type="checkbox" disabled={busy} checked={allowDuplicates} onChange={e=>setAllowDuplicates(e.target.checked)}/>I reviewed possible cross-format content duplicates; import all statement rows if warned. Exact repeated source IDs still fail.</label>
+      <div className="flex flex-wrap gap-3"><button aria-busy={busy} disabled={!card || busy || Boolean(result)||!accounts.length||statement.transactions.some((r,i)=>["purchase","refund","fee","interest"].includes(r.type)?!categoryMap[String(i)]:r.type==="payment"?!paymentMap[String(i)]:false)} onClick={commit} className="mt-4 rounded-xl bg-primary px-5 py-3 font-semibold text-primary-foreground disabled:opacity-50">{busy ? "Importing…" : result ? "Imported" : "Import all statement rows"}</button><button disabled={busy} onClick={() => { setStatement(null); setCategoryMap({}); setPaymentMap({}); if (fileInput.current) fileInput.current.value = ""; }} className="mt-4 rounded-xl border px-5 py-3">Cancel</button></div>
     </section>}
     {error && <p role="alert" className="my-4 rounded-xl bg-destructive/10 p-3 text-destructive">{error}</p>}
     {result && <section role="status" className="rounded-3xl border bg-card p-5"><h2 className="font-bold">{result.duplicate ? "Statement already imported" : "Import complete"}</h2>{!result.duplicate && <p className="mt-2 text-sm">Reconciliation difference: {formatMoney(result.difference)} · expected {formatMoney(result.expectedClosing)} debt, recorded {formatMoney(result.actualClosing)} debt</p>}<p className="mt-1 text-xs text-muted-foreground">Differences never create automatic adjustments.</p></section>}
-  </AppLayout>;
+    </div>}</TabsContent></Tabs>
+    <section className="panel mt-5"><h2>Import history</h2><p className="mt-2 text-sm text-muted-foreground">Raw files are not stored. Legacy JSON row counts may be unavailable.</p>{history.isPending?<p role="status">Loading import history…</p>:history.error?<p role="alert" className="text-destructive">{history.error.message}</p>:history.data?.length?<ul className="mt-3 divide-y">{history.data.map(h=><li className="flex flex-wrap justify-between gap-3 py-3" key={`${h.format}-${h.id}`}><div><strong>{h.account_name}</strong><p className="text-xs text-muted-foreground">{h.created_at} · {h.format.toUpperCase()}</p></div><span>{h.rows||h.format==="csv"?`${h.rows} rows`:"Legacy row count unavailable"}</span></li>)}</ul>:<p className="mt-4">No imports recorded.</p>}</section>
+  </>;
 }

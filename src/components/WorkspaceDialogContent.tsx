@@ -1,0 +1,3 @@
+import {useRef,type ComponentProps} from "react";
+import {DialogContent} from "@/components/ui/dialog";
+export default function WorkspaceDialogContent(props:ComponentProps<typeof DialogContent>){const opener=useRef<HTMLElement|null>(null);return <DialogContent {...props} className={`max-h-[90dvh] overflow-y-auto bg-card shadow-raised ${props.className??""}`} onOpenAutoFocus={e=>{opener.current=document.activeElement instanceof HTMLElement?document.activeElement:null;props.onOpenAutoFocus?.(e);}} onCloseAutoFocus={e=>{props.onCloseAutoFocus?.(e);if(!e.defaultPrevented&&opener.current?.isConnected){e.preventDefault();opener.current.focus();}}}/>;}

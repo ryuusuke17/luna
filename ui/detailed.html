@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#3976e8">
+  <title>Luna | Personal finance</title>
+  <link rel="stylesheet" href="detailed.css">
+  <script src="detailed.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <button class="quiet menu-close" data-action="close-menu" aria-label="Close navigation">Close navigation</button>
+      <a class="brand" href="#dashboard"><span class="brand-mark">L</span>Luna<span class="badge">DEMO</span></a>
+      <p class="nav-heading">Workspace</p>
+      <nav aria-label="Main navigation">
+        <a href="#dashboard" data-route="dashboard"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/></svg>Dashboard</a>
+        <a href="#budget" data-route="budget"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8l-2 4H10zM10 8C6 11 4 15 6 19c2 3 10 3 12 0 2-4 0-8-4-11M12 11v8M15 12h-4c-3 0-3 3 0 3h2c3 0 3 3 0 3H9"/></svg>Budget</a>
+        <a href="#bills" data-route="bills"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6"/></svg>My bills</a>
+        <a href="#goals" data-route="goals"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="m12 12 8-8M17 3h4v4"/></svg>Goals</a>
+        <a href="#transactions" data-route="transactions"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16m-4-4 4 4-4 4M20 17H4m4-4-4 4 4 4"/></svg>Transactions</a>
+        <a href="#accounts" data-route="accounts"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 8 9-5 9 5zM5 10v8M10 10v8M14 10v8M19 10v8M3 21h18M3 18h18"/></svg>Accounts</a>
+      </nav>
+      <p class="nav-heading">Manage</p>
+      <nav aria-label="Tools">
+        <a href="#settings" data-route="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h6m4 0h8M3 12h12m4 0h2M3 18h3m4 0h11M9 3v6M15 9v6M6 15v6"/></svg>Settings</a>
+        <a href="#import" data-route="import"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M4 14v6h16v-6"/></svg>Import transactions</a>
+        <a href="#help" data-route="help"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18v13H9l-6 4zM9 8c0-3 6-3 6 0 0 2-3 2-3 4M12 14v.1"/></svg>Help &amp; support</a>
+      </nav>
+      <div class="sidebar-footer">
+        <button class="primary" data-action="new-transaction">+ Add transaction</button>
+        <div class="profile-mini"><span class="avatar">L</span><span><strong>Local workspace</strong><small>Invented sample data</small></span></div>
+      </div>
+    </aside>
+    <header class="topbar">
+      <button class="icon-button menu-toggle" aria-label="Open navigation" aria-controls="sidebar" aria-expanded="false" data-action="menu">Menu</button>
+      <label class="search"><span class="sr-only">Search transactions, accounts, and bills</span><span aria-hidden="true" class="search-mark">Search</span><input id="global-search" type="search" placeholder="Find a transaction, account, or bill..." autocomplete="off"></label>
+      <div class="top-actions"><button class="quiet" data-action="new-transaction">+ Add</button><a class="avatar" href="#settings" aria-label="Profile settings">L</a></div>
+      <div class="search-results" id="search-results" hidden></div>
+    </header>
+    <main id="main" tabindex="-1"><noscript><p class="callout warning">Enable JavaScript to explore this local demo. No real data is loaded.</p></noscript></main>
+  </div>
+  <div class="menu-scrim" data-action="close-menu" hidden></div>
+  <dialog id="dialog" aria-labelledby="dialog-title" aria-describedby="dialog-description"><form id="dialog-form"><header class="dialog-head"><div><h2 id="dialog-title"></h2><p id="dialog-description" class="muted"></p></div><button type="button" class="icon-button" data-action="close-dialog" aria-label="Close dialog">Close</button></header><div id="dialog-fields" class="dialog-fields"></div><footer class="dialog-footer"><button type="button" class="quiet" data-action="close-dialog">Cancel</button><button class="primary" type="submit">Save to demo</button></footer></form></dialog>
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>

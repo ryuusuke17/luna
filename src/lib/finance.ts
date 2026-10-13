@@ -4,9 +4,9 @@ export function parseMoney(value: string): number {
   const input = value.trim();
   const match = /^(0|[1-9]\d*)(?:\.(\d{1,2}))?$/.exec(input);
   if (!match) throw new Error("Enter a non-negative amount with up to two decimals");
-  const minor = Number(match[1]) * 100 + Number((match[2] ?? "").padEnd(2, "0"));
-  if (!Number.isSafeInteger(minor) || minor > MAX_MINOR) throw new Error("Amount is too large");
-  return minor;
+  const minor = BigInt(match[1]) * 100n + BigInt((match[2] ?? "").padEnd(2, "0"));
+  if (minor > BigInt(MAX_MINOR)) throw new Error("Amount is too large");
+  return Number(minor);
 }
 
 export function formatMoney(minor: number): string {
