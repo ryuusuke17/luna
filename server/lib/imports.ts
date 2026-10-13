@@ -1,0 +1,28 @@
+import { createHash } from "node:crypto";
+import { atomic,db } from "./db.ts";
+import { createTransaction,balanceFor } from "./ledger.ts";
+import { isCalendarDate,parseMoney,MAX_MINOR } from "../../src/lib/finance.ts";
+
+type Row={source_id?:string;posted_date:string;transaction_date?:string;type:string;merchant?:string;description?:string;amount:string;category_hint?:string;counter_account_key?:string};
+type Statement={schema_version:number;statement_id:string;account_key:string;currency:string;period:{start:string;end:string};opening_balance:string;closing_balance:string;transactions:Row[]};
+const amount=(v:unknown)=>{if(typeof v!=="string")throw new Error("Amounts must be decimal strings");return parseMoney(v)};
+export function parseStatement(raw:unknown){
+ if(!raw||typeof raw!=="object")throw new Error("Invalid statement");const s=raw as Statement;
+ if(s.schema_version!==1||typeof s.statement_id!=="string"||!s.statement_id.trim()||s.statement_id.length>120||typeof s.account_key!=="string"||!s.account_key.trim()||s.currency!=="PHP"||!s.period||!isCalendarDate(s.period.start)||!isCalendarDate(s.period.end)||s.period.end<s.period.start||!Array.isArray(s.transactions)||s.transactions.length>5000)throw new Error("Invalid statement header");
+ amount(s.opening_balance);const closing=amount(s.closing_balance);let computed=amount(s.opening_balance);
+ for(const r of s.transactions){if(!r||typeof r!=="object"||!isCalendarDate(r.posted_date)||r.posted_date<s.period.start||r.posted_date>s.period.end||r.transaction_date!==undefined&&!isCalendarDate(r.transaction_date)||typeof r.type!=="string"||!["purchase","refund","payment","fee","interest"].includes(r.type)||typeof r.description!=="string"&&typeof r.merchant!=="string"||String(r.description??r.merchant).length>240||r.source_id!==undefined&&(typeof r.source_id!=="string"||!r.source_id.trim()||r.source_id.length>160))throw new Error("Invalid statement row");const n=amount(r.amount);computed+=r.type==="refund"||r.type==="payment"?-n:n;if(!Number.isSafeInteger(computed))throw new Error("Statement total is too large");if(r.type==="payment"&&(typeof r.counter_account_key!=="string"||!r.counter_account_key.trim()))throw new Error("Payment rows require counter_account_key");}
+ if(computed!==closing)throw new Error("Statement transactions do not match closing balance");return{statement:s,closing};
+}
+export function importStatement(ownerId:number,accountId:number,payload:unknown,categoryMap:Record<string,number>,paymentMap:Record<string,number>){
+ if(!Number.isSafeInteger(ownerId)||ownerId<=0||!Number.isSafeInteger(accountId)||accountId<=0)throw new Error("Invalid account");const {statement,closing}=parseStatement(payload);return atomic(()=>{
+ const card=db.prepare("SELECT type,opening_date,archived_at FROM accounts WHERE id=? AND owner_id=?").get(accountId,ownerId) as {type:string;opening_date:string;archived_at:string|null}|undefined;if(!card||card.type!=="credit_card"||card.archived_at)throw new Error("Choose an active credit card");if(statement.period.start<card.opening_date)throw new Error("Statement predates card opening; resolve coverage first");
+ const previous=db.prepare("SELECT id FROM statement_imports WHERE owner_id=? AND account_id=? AND statement_id=?").get(ownerId,accountId,statement.statement_id) as {id:number}|undefined;if(previous)return{importId:previous.id,duplicate:true};
+ const id=Number(db.prepare("INSERT INTO statement_imports(owner_id,account_id,statement_id,period_start,period_end,closing_balance) VALUES(?,?,?,?,?,?)").run(ownerId,accountId,statement.statement_id,statement.period.start,statement.period.end,closing).lastInsertRowid);
+ for(let i=0;i<statement.transactions.length;i++){const row=statement.transactions[i],category=row.type==="purchase"||row.type==="refund"||row.type==="fee"||row.type==="interest"?categoryMap[String(i)]:undefined;let kind:"expense"|"refund"|"transfer"=row.type==="refund"?"refund":row.type==="payment"?"transfer":"expense",account=accountId,counterAccountId:number|undefined;
+ if(kind==="transfer"){const funding=paymentMap[String(i)];if(!Number.isSafeInteger(funding)||funding===accountId)throw new Error(`Choose a funding account for payment row ${i+1}`);account=funding;counterAccountId=accountId;}else if(!Number.isSafeInteger(category))throw new Error(`Choose a category for row ${i+1}`);
+ const source=row.source_id??`${statement.statement_id}:${i}`,sourceKey=`${accountId}:${source}`;if(row.source_id&&knownSource(ownerId,accountId,sourceKey))throw new Error(`Source transaction already imported: ${source}`);const key=`import:${createHash("sha256").update(sourceKey).digest("hex")}`;const tx=createTransaction(ownerId,{kind,date:row.posted_date,amount:amount(row.amount),accountId,counterAccountId,categoryId:category,description:String(row.description??row.merchant??"").slice(0,240),idempotencyKey:key});db.prepare("INSERT INTO statement_import_rows(owner_id,account_id,source_id,transaction_id) VALUES(?,?,?,?)").run(ownerId,accountId,sourceKey,tx.id);
+ }
+ const actual=-balanceFor(ownerId,accountId,statement.period.end),difference=closing-actual;db.prepare("INSERT INTO audit_events(owner_id,action,entity_id,details) VALUES(?,?,?,?)").run(ownerId,"statement.import",id,JSON.stringify({rows:statement.transactions.length,difference}));return{importId:id,duplicate:false,expectedClosing:closing,actualClosing:actual,difference};
+ });
+}
+export function knownSource(ownerId:number,accountId:number,sourceId:string){return db.prepare("SELECT 1 FROM statement_import_rows WHERE owner_id=? AND account_id=? AND source_id=?").get(ownerId,accountId,sourceId)!==undefined}

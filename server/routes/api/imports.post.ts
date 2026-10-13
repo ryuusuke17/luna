@@ -1,0 +1,5 @@
+import { defineHandler } from "nitro";
+import { createError,getRequestHeader,readRawBody } from "nitro/h3";
+import { requireMutation,requireUser } from "../../lib/request";
+import { importStatement } from "../../lib/imports";
+export default defineHandler(async event=>{const user=requireUser(event);requireMutation(event);if(!getRequestHeader(event,"content-type")?.includes("application/json"))throw createError({statusCode:415,statusMessage:"Expected JSON"});const raw=await readRawBody(event,false);if(!raw||Buffer.byteLength(raw)>2_100_000)throw createError({statusCode:413,statusMessage:"Import is limited to 2 MB"});let body:any;try{body=JSON.parse(raw)}catch{throw createError({statusCode:400,statusMessage:"Invalid JSON"})}try{return importStatement(user.id,Number(body?.accountId),body?.statement,body?.categoryMap??{},body?.paymentMap??{})}catch(error){throw createError({statusCode:400,statusMessage:error instanceof Error?error.message:"Invalid statement"})}});
