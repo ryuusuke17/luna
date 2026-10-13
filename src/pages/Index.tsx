@@ -1,19 +1,9 @@
-// Update this page (the content is just a fallback if you fail to update the page)
-
-import { MadeWithDyad } from "@/components/made-with-dyad";
-
-const Index = () => {
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold mb-4">Welcome to Your Blank App</h1>
-        <p className="text-xl text-gray-600">
-          Start building your amazing project here!
-        </p>
-      </div>
-      <MadeWithDyad />
-    </div>
-  );
-};
-
-export default Index;
+import { useEffect, useState } from "react";
+import { ArrowUpRight, ArrowDownRight, Plus, ShieldCheck, WalletCards } from "lucide-react";
+import { Link } from "react-router-dom";
+import AppLayout from "@/components/AppLayout";
+import { api } from "@/lib/api";
+import { formatMoney } from "@/lib/finance";
+type Report={month:string;assets:number;liabilities:number;netWorth:number;income:number;expenses:number;cashFlow:{amount:number};categories:{name:string;amount:number}[]};
+type Tx={id:number;posted_date:string;kind:string;description:string;amount:number;account_name:string};
+export default function Index(){const [report,setReport]=useState<Report>();const [tx,setTx]=useState<Tx[]>([]);useEffect(()=>{api<Report>("reports").then(setReport).catch(()=>{});api<Tx[]>("transactions").then(setTx).catch(()=>{})},[]);return <AppLayout><header className="mb-8 flex flex-wrap items-end justify-between gap-4"><div><p className="mb-2 text-sm font-semibold uppercase tracking-[.16em] text-primary">Your money, in balance</p><h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Good to see you.</h1><p className="mt-2 text-muted-foreground">A clear view of your finances, one day at a time.</p></div><Link to="/transactions?new=1" className="hidden items-center gap-2 rounded-xl bg-primary px-5 py-3 font-semibold text-primary-foreground shadow-sm hover:opacity-90 sm:flex"><Plus size={18}/>Add transaction</Link></header><section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><article className="rounded-3xl bg-primary p-6 text-primary-foreground sm:col-span-2"><div className="flex items-center justify-between text-sm font-medium opacity-80"><span>Net worth</span><WalletCards size={18}/></div><p className="mt-5 text-4xl font-bold tabular-nums">{report?formatMoney(report.netWorth):"—"}</p><p className="mt-2 text-sm opacity-75">Recorded balances · PHP</p></article>{[["Income this month",report?.income,ArrowDownRight,"text-teal-700"],["Spending this month",report?.expenses,ArrowUpRight,"text-rose-600"]].map(([label,value,Icon,color]:any)=><article key={label} className="rounded-3xl border bg-card p-6"><div className="flex items-center gap-2 text-sm font-medium text-muted-foreground"><Icon className={color} size={18}/>{label}</div><p className="mt-5 text-2xl font-bold tabular-nums">{value==null?"—":formatMoney(value)}</p><p className="mt-2 text-xs text-muted-foreground">Posted transactions</p></article>)}</section><section className="mt-5 grid gap-5 lg:grid-cols-[1.5fr_1fr]"><div className="rounded-3xl border bg-card p-6"><div className="mb-5 flex items-center justify-between"><div><h2 className="text-lg font-bold">Recent activity</h2><p className="text-sm text-muted-foreground">Latest posted transactions</p></div><Link to="/transactions" className="text-sm font-semibold text-primary">View all</Link></div>{tx.length?<div className="divide-y">{tx.slice(0,6).map(t=><div key={t.id} className="flex items-center justify-between gap-3 py-4"><div className="min-w-0"><p className="truncate font-semibold">{t.description||t.kind}</p><p className="mt-1 text-xs text-muted-foreground">{t.posted_date} · {t.account_name||"Account"}</p></div><span className="shrink-0 font-semibold tabular-nums">{formatMoney(t.amount)}</span></div>)}</div>:<div className="rounded-2xl bg-muted/60 px-5 py-10 text-center"><div className="mx-auto mb-3 grid size-12 place-items-center rounded-2xl bg-background text-primary"><ArrowUpRight/></div><p className="font-semibold">Your story starts here</p><p className="mt-1 text-sm text-muted-foreground">Add an account and record your first transaction.</p><Link to="/accounts" className="mt-4 inline-block font-semibold text-primary">Set up an account</Link></div>}</div><div className="space-y-5"><div className="rounded-3xl border bg-card p-6"><div className="mb-5 flex items-center justify-between"><div><h2 className="text-lg font-bold">At a glance</h2><p className="text-sm text-muted-foreground">Recorded today</p></div><ShieldCheck className="text-primary"/></div><div className="space-y-4">{[["Assets",report?.assets],["Liabilities",report?.liabilities],["Net cash flow",report?.cashFlow?.amount]].map(([l,v]:any)=><div key={l} className="flex justify-between text-sm"><span className="text-muted-foreground">{l}</span><strong className="tabular-nums">{v==null?"—":formatMoney(v)}</strong></div>)}</div><p className="mt-5 border-t pt-4 text-xs leading-relaxed text-muted-foreground">Balances reflect recorded history only. Reconcile accounts regularly; missing earlier records are not shown as zero.</p></div><div className="rounded-3xl bg-secondary p-6"><h2 className="font-bold">Small steps add up.</h2><p className="mt-2 text-sm leading-relaxed text-secondary-foreground/75">Track spending, keep budgets in reach, and make decisions with confidence.</p><Link to="/analytics" className="mt-4 inline-flex font-semibold text-primary">Explore analytics →</Link></div></div></section></AppLayout>}

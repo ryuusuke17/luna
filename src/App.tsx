@@ -4,24 +4,15 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
+import Login from "./pages/Login";
+import Accounts from "./pages/Accounts";
+import Transactions from "./pages/Transactions";
+import Analytics from "./pages/Analytics";
+import Budgets from "./pages/Budgets";
+import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
-
+import Protected from "@/components/Protected";
 const queryClient = new QueryClient();
-
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
-
+const Guard=({children}:{children:React.ReactNode})=><Protected>{children}</Protected>;
+const App = () => <QueryClientProvider client={queryClient}><TooltipProvider><Toaster/><Sonner/><BrowserRouter><Routes><Route path="/login" element={<Login/>}/><Route path="/" element={<Guard><Index/></Guard>}/><Route path="/accounts" element={<Guard><Accounts/></Guard>}/><Route path="/transactions" element={<Guard><Transactions/></Guard>}/><Route path="/analytics" element={<Guard><Analytics/></Guard>}/><Route path="/budgets" element={<Guard><Budgets/></Guard>}/><Route path="/settings" element={<Guard><Settings/></Guard>}/><Route path="*" element={<NotFound/>}/></Routes></BrowserRouter></TooltipProvider></QueryClientProvider>;
 export default App;

@@ -1,0 +1,13 @@
+import Database from 'better-sqlite3';
+import { mkdir } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
+const source = resolve(process.env.LUNA_DB_PATH || './data/luna.sqlite');
+const destination = resolve(process.argv[2] || `./backups/luna-${new Date().toISOString().replaceAll(':','-')}.sqlite`);
+await mkdir(dirname(destination), { recursive: true });
+const db = new Database(source, { readonly: true });
+await db.backup(destination);
+const check = new Database(destination, { readonly: true });
+const result = check.pragma('integrity_check', { simple: true });
+check.close(); db.close();
+if (result !== 'ok') throw new Error(`Backup integrity check failed: ${result}`);
+process.stdout.write(`${destination}\n`);

@@ -1,0 +1,2 @@
+import { useEffect,useState } from "react";import{Navigate}from"react-router-dom";import{api}from"@/lib/api";
+export default function Protected({children}:{children:React.ReactNode}){const[ok,setOk]=useState<boolean|null>(null);useEffect(()=>{api<{user:unknown}>("auth/me").then(r=>setOk(Boolean(r.user))).catch(()=>setOk(false))},[]);if(ok===null)return <div className="grid min-h-screen place-items-center text-muted-foreground">Loading Luna…</div>;return ok?<>{children}</>:<Navigate to="/login" replace/>}
