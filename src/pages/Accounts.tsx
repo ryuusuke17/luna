@@ -38,7 +38,7 @@ export default function Accounts() {
     e.preventDefault(); const form = new FormData(e.currentTarget);
     const provider = issuer === "Other" ? customIssuer.trim() : issuer;
     try {
-      await send("accounts", { name: form.get("name"), type, openingDate: form.get("date"), openingBalance: form.get("balance") || "0", liquid: form.get("liquid") === "on", issuer: provider || undefined, product: product || undefined, network: network || undefined });
+      await send("accounts", { name: form.get("name"), type, openingDate: form.get("date"), openingBalance: "0", creditLimit: form.get("creditLimit") || undefined, liquid: form.get("liquid") === "on", issuer: provider || undefined, product: product || undefined, network: network || undefined });
       setShow(false); changeType("credit_card"); await load();
     } catch (e) { setError(e instanceof Error ? e.message : "Unable to save account"); }
   }
@@ -54,8 +54,7 @@ export default function Accounts() {
         <label className="text-sm font-semibold">Card network<select value={network} onChange={e => setNetwork(e.target.value)} className="mt-2 h-11 w-full rounded-xl border bg-background px-3"><option value="">Select network</option>{cardNetworks.map(item => <option key={item} value={item}>{item}</option>)}</select></label>
       </>}
       <label className="text-sm font-semibold">Opening date<input type="date" name="date" required defaultValue={new Date().toISOString().slice(0, 10)} className="mt-2 h-11 w-full rounded-xl border bg-background px-3" /></label>
-      <label className="text-sm font-semibold">Opening balance · PHP<input name="balance" inputMode="decimal" placeholder="0.00" className="mt-2 h-11 w-full rounded-xl border bg-background px-3" /></label>
-      {type === "credit_card" && <><label className="text-sm font-semibold">Last 4 digits (optional)<input name="last4" inputMode="numeric" pattern="[0-9]{4}" maxLength={4} className="mt-2 h-11 w-full rounded-xl border bg-background px-3" /></label><label className="text-sm font-semibold">Credit limit · PHP (optional)<input name="creditLimit" inputMode="decimal" placeholder="0.00" className="mt-2 h-11 w-full rounded-xl border bg-background px-3" /></label></>}
+      {type === "credit_card" && <><label className="text-sm font-semibold">Last 4 digits (optional)<input name="last4" inputMode="numeric" pattern="[0-9]{4}" maxLength={4} className="mt-2 h-11 w-full rounded-xl border bg-background px-3" /></label><label className="text-sm font-semibold">Credit limit · PHP<input name="creditLimit" type="number" inputMode="decimal" min="0.01" step="0.01" required className="mt-2 h-11 w-full rounded-xl border bg-background px-3" /></label></>}
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="liquid" />Liquid cash/bank/wallet for cash-flow reports</label><button className="rounded-xl bg-primary px-4 py-3 font-semibold text-primary-foreground">Save account</button>
     </form>}
     {error && <p role="alert" className="mb-4 text-destructive">{error}</p>}

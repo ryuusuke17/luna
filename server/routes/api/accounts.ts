@@ -27,6 +27,7 @@ export default defineHandler(async event => {
     try { creditLimit = parseMoney(String(body.creditLimit)); }
     catch (error) { throw createError({ statusCode: 400, statusMessage: error instanceof Error ? error.message : "Invalid credit limit" }); }
   }
+  if (body.type === "credit_card" && (!creditLimit || creditLimit <= 0)) throw createError({ statusCode: 400, statusMessage: "Credit cards require a positive credit limit" });
   const last4 = typeof body.last4 === "string" && /^\d{4}$/.test(body.last4) ? body.last4 : null;
   const id = atomic(() => {
     const result = db.prepare("INSERT INTO accounts(owner_id,name,type,liquid,opening_date,last4,credit_limit,issuer,product,network) VALUES(?,?,?,?,?,?,?,?,?,?)")
