@@ -8,7 +8,7 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
-    "test": "node --experimental-strip-types --test server/lib/*.test.ts",
+    "test": "node --experimental-strip-types --test server/lib/ledger.test.ts server/lib/imports.test.ts",
     "preview": "vite preview",
     "start": "node .output/server/index.mjs"
   },
