@@ -1,24 +1,24 @@
 import argon2 from "argon2";
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { db } from "./db";
-
-const hash = (token: string) => createHash("sha256").update(token).digest("hex");
-export async function setupOwner(username: string, password: string, setupToken?: string) {
-  if (!/^[a-zA-Z0-9_.-]{3,40}$/.test(username) || password.length < 12 || password.length > 200) throw new Error("Use a 3–40 character username and password of at least 12 characters");
-  const count = (db.prepare("SELECT count(*) n FROM users").get() as {n:number}).n;
-  if (count && (process.env.NODE_ENV === "production" && (!process.env.LUNA_SETUP_TOKEN || !setupToken || !timingSafeEqual(Buffer.from(setupToken),Buffer.from(process.env.LUNA_SETUP_TOKEN))))) throw new Error("Owner setup is closed");
-  const passwordHash = await argon2.hash(password, { type: argon2.argon2id });
-  return Number(db.prepare("INSERT INTO users(username,password_hash) VALUES(?,?)").run(username,passwordHash).lastInsertRowid);
+import { createHash,randomBytes,timingSafeEqual } from "node:crypto";
+import { db } from "./db.ts";
+const digest=(value:string)=>createHash("sha256").update(value).digest("hex");
+const equal=(a:string,b:string)=>{const x=Buffer.from(a),y=Buffer.from(b);return x.length===y.length&&timingSafeEqual(x,y)};
+const attempts=new Map<string,{count:number;until:number}>();let dummyHashPromise:Promise<string>|undefined;
+export async function setupOwner(username:string,password:string,setupToken?:string){
+ if(!/^[a-zA-Z0-9_.-]{3,40}$/.test(username)||password.length<12||password.length>200)throw new Error("Use a 3–40 character username and password of at least 12 characters");
+ if((db.prepare("SELECT count(*) n FROM users").get() as {n:number}).n)throw new Error("Owner already exists");
+ if(process.env.NODE_ENV==="production"&&(!process.env.LUNA_SETUP_TOKEN||!setupToken||!equal(setupToken,process.env.LUNA_SETUP_TOKEN)))throw new Error("Owner setup is closed");
+ const passwordHash=await argon2.hash(password,{type:argon2.argon2id});
+ try{return db.transaction(()=>{if((db.prepare("SELECT count(*) n FROM users").get() as {n:number}).n)throw new Error("Owner already exists");const id=Number(db.prepare("INSERT INTO users(username,password_hash) VALUES(?,?)").run(username,passwordHash).lastInsertRowid);for(const table of ["accounts","categories","transactions","budgets","audit_events"])db.prepare(`UPDATE ${table} SET owner_id=? WHERE owner_id IS NULL`).run(id);if(!(db.prepare("SELECT count(*) n FROM categories WHERE owner_id=?").get(id) as {n:number}).n){for(const[name,kind]of[["Groceries","expense"],["Housing","expense"],["Transport","expense"],["Utilities","expense"],["Health","expense"],["Shopping","expense"],["Other","expense"],["Salary","income"],["Other income","income"]])db.prepare("INSERT INTO categories(owner_id,name,kind) VALUES(?,?,?)").run(id,name,kind)}return id})()}catch{throw new Error("Owner already exists")}
 }
-export async function login(username: string, password: string) {
-  const user = db.prepare("SELECT id,password_hash FROM users WHERE username=?").get(username) as {id:number;password_hash:string}|undefined;
-  if (!user || !await argon2.verify(user.password_hash,password)) throw new Error("Invalid username or password");
-  const token = randomBytes(32).toString("base64url");
-  db.prepare("INSERT INTO sessions(token_hash,user_id,expires_at) VALUES(?,?,?)").run(hash(token),user.id,new Date(Date.now()+7*86400000).toISOString());
-  return token;
+export async function login(username:string,password:string,ip="unknown"){
+ const now=Date.now(),keys=[`ip:${ip}`,`user:${username.toLowerCase()}`];for(const key of keys){const e=attempts.get(key);if(e&&e.until>now&&e.count>=10)throw new Error("Too many attempts. Try again later")}
+ const user=db.prepare("SELECT id,password_hash FROM users WHERE username=?").get(username) as {id:number;password_hash:string}|undefined;let valid=false;try{const fallback=dummyHashPromise??=(argon2.hash("luna-dummy-password-never-used",{type:argon2.argon2id}));valid=await argon2.verify(user?.password_hash??await fallback,password)}catch{}
+ if(!user||!valid){for(const key of keys){const e=attempts.get(key),count=e&&e.until>now?e.count+1:1;attempts.set(key,{count,until:now+15*60_000})}throw new Error("Invalid username or password")}
+ for(const key of keys)attempts.delete(key);const token=randomBytes(32).toString("base64url"),csrf=randomBytes(32).toString("base64url");db.prepare("INSERT INTO sessions(token_hash,user_id,csrf_hash,expires_at) VALUES(?,?,?,?)").run(digest(token),user.id,digest(csrf),new Date(now+7*86400000).toISOString());return{token,csrf}
 }
-export function session(token?: string) {
-  if (!token) return null;
-  return db.prepare("SELECT u.id,u.username FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>CURRENT_TIMESTAMP").get(hash(token)) as {id:number;username:string}|undefined ?? null;
-}
-export function logout(token?: string) { if (token) db.prepare("DELETE FROM sessions WHERE token_hash=?").run(hash(token)); }
+export function session(token?:string){if(!token)return null;return db.prepare("SELECT u.id,u.username,s.csrf_hash FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND datetime(s.expires_at)>CURRENT_TIMESTAMP").get(digest(token)) as {id:number;username:string;csrf_hash:string}|undefined??null}
+export function logout(token?:string){if(token)db.prepare("DELETE FROM sessions WHERE token_hash=?").run(digest(token))}
+export function validateCsrf(token:string|undefined,csrfCookie:string|undefined,header:string|undefined){if(!token||!csrfCookie||!header||!equal(csrfCookie,header))return false;const s=session(token);return Boolean(s&&equal(digest(csrfCookie),s.csrf_hash))}
+export async function setPassword(username:string,password:string){if(password.length<12||password.length>200)throw new Error("Password must be 12–200 characters");const hash=await argon2.hash(password,{type:argon2.argon2id});const r=db.prepare("UPDATE users SET password_hash=? WHERE username=?").run(hash,username);if(!r.changes)throw new Error("Owner not found");db.prepare("DELETE FROM sessions").run()}
+export function audit(ownerId:number,action:string,entityId?:number){db.prepare("INSERT INTO audit_events(owner_id,action,entity_id) VALUES(?,?,?)").run(ownerId,action,entityId??null)}

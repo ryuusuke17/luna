@@ -27,3 +27,4 @@ backups/
 .env
 .env.*
 !.env.example
+.dyad/

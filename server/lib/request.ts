@@ -1,0 +1,4 @@
+import { createError,getCookie,getRequestHeader } from "nitro/h3";
+import { session,validateCsrf } from "./auth.ts";
+export function requireUser(event:any){const token=getCookie(event,"luna_session"),user=session(token);if(!user)throw createError({statusCode:401,statusMessage:"Sign in required"});return user}
+export function requireMutation(event:any){const token=getCookie(event,"luna_session"),csrf=getCookie(event,"luna_csrf"),header=getRequestHeader(event,"x-luna-csrf");if(process.env.NODE_ENV==="production"){const origin=getRequestHeader(event,"origin"),host=getRequestHeader(event,"host");if(!origin||!host||new URL(origin).host!==host)throw createError({statusCode:403,statusMessage:"Invalid request origin"})}if(!validateCsrf(token,csrf,header))throw createError({statusCode:403,statusMessage:"Invalid CSRF token"})}
