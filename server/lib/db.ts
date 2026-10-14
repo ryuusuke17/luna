@@ -38,3 +38,13 @@ CREATE UNIQUE INDEX IF NOT EXISTS csv_source_idx ON csv_import_rows(owner_id,acc
 addColumn("statement_import_rows","import_id","INTEGER REFERENCES statement_imports(id)");
 
 addColumn("bills","payment_kind","TEXT NOT NULL DEFAULT 'expense'");
+
+addColumn("transactions","original_currency","TEXT NOT NULL DEFAULT 'PHP'");
+addColumn("transactions","original_amount","INTEGER");
+addColumn("transactions","exchange_rate","TEXT NOT NULL DEFAULT '1'");
+addColumn("transactions","included_fee","INTEGER NOT NULL DEFAULT 0");
+db.exec("UPDATE transactions SET original_amount=amount WHERE original_amount IS NULL");
+addColumn("workspace_preferences","default_transaction_currency","TEXT NOT NULL DEFAULT 'PHP'");
+addColumn("statement_imports","reconciliation_stale","INTEGER NOT NULL DEFAULT 0");
+addColumn("csv_import_batches","reconciliation_stale","INTEGER NOT NULL DEFAULT 0");
+addColumn("accounts","reconciliation_stale","INTEGER NOT NULL DEFAULT 0");

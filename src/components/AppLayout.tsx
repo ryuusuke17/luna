@@ -12,7 +12,7 @@ const manage=[["/settings","Settings",Settings],["/imports","Imports",FileUp],["
 type Result={type:string;id:number;label:string;detail:string};
 export default function AppLayout(){
  const nav=useNavigate(),location=useLocation(),client=useQueryClient(),[params,setParams]=useSearchParams(),[drawer,setDrawer]=useState(false),[entry,setEntry]=useState(false),[query,setQuery]=useState(""),[term,setTerm]=useState(""),[searchOpen,setSearchOpen]=useState(false),[active,setActive]=useState(-1),[signingOut,setSigningOut]=useState(false),[error,setError]=useState(""),search=useRef<HTMLInputElement>(null);
- const prefs=useQuery({queryKey:["preferences"],queryFn:()=>api<{shortcuts:number;bill_alerts:number;budget_alerts:number;goal_alerts:number}>("preferences")}),profile=useQuery({queryKey:["profile"],queryFn:()=>api<{user:{username:string}}>("auth/me")});
+ const prefs=useQuery({queryKey:["preferences"],queryFn:()=>api<{default_transaction_currency:string;shortcuts:number;bill_alerts:number;budget_alerts:number;goal_alerts:number}>("preferences")}),profile=useQuery({queryKey:["profile"],queryFn:()=>api<{user:{username:string}}>("auth/me")});
  const results=useQuery({queryKey:["search",term],queryFn:()=>api<Result[]>(`search?q=${encodeURIComponent(term)}`),enabled:Boolean(term)});
  useEffect(()=>{const timer=setTimeout(()=>{setTerm(query.trim());setActive(-1);},200);return()=>clearTimeout(timer);},[query]);
  useEffect(()=>{if(params.get("new")==="1")setEntry(true);},[params]);
@@ -31,7 +31,7 @@ export default function AppLayout(){
   </div>)}
   <div className="mt-auto grid gap-4 border-t border-sidebar-border pt-5">
    <button onClick={()=>{setDrawer(false);setEntry(true);}} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-sidebar-primary px-4 py-3 text-sm font-semibold text-sidebar-primary-foreground hover:bg-sidebar-primary/80"><Plus size={18} aria-hidden/>Add transaction</button>
-   <Link to="/settings" className="flex min-h-12 items-center gap-3 rounded-md px-2 py-2 hover:bg-sidebar-accent"><span className="grid size-10 shrink-0 place-items-center rounded-full bg-sidebar-accent text-sm font-semibold">{profile.data?.user.username?.slice(0,1).toUpperCase()??"L"}</span><span className="min-w-0"><strong className="block truncate text-sm">{profile.data?.user.username??"Workspace"}</strong><span className="text-xs text-white/60">PHP · Private workspace</span></span></Link>
+   <Link to="/settings" className="flex min-h-12 items-center gap-3 rounded-md px-2 py-2 hover:bg-sidebar-accent"><span className="grid size-10 shrink-0 place-items-center rounded-full bg-sidebar-accent text-sm font-semibold">{profile.data?.user.username?.slice(0,1).toUpperCase()??"L"}</span><span className="min-w-0"><strong className="block truncate text-sm">{profile.data?.user.username??"Workspace"}</strong><span className="text-xs text-white/60">PHP reporting · Private workspace</span></span></Link>
    <button onClick={logout} disabled={signingOut} aria-busy={signingOut} className="flex min-h-11 items-center gap-3 rounded-full px-4 text-sm text-white/70 hover:bg-sidebar-accent hover:text-white"><LogOut size={18} aria-hidden/>{signingOut?"Signing out…":"Sign out"}</button>
    {error&&<p role="alert" className="text-sm">{error}</p>}
   </div>

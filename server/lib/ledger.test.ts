@@ -3,7 +3,7 @@ import test from "node:test";
 import { isCalendarDate,netWorth,parseMoney } from "../../src/lib/finance.ts";
 process.env.LUNA_DB_PATH=":memory:";
 const {db}=await import("./db.ts");
-const {createTransaction,balanceFor,voidTransaction}=await import("./ledger.ts");
+const {createTransaction,balanceFor,voidTransaction,correctTransaction,transactionVersion,resolveTransaction}=await import("./ledger.ts");
 const owner=Number(db.prepare("INSERT INTO users(username,password_hash) VALUES('owner','hash')").run().lastInsertRowid);
 const other=Number(db.prepare("INSERT INTO users(username,password_hash) VALUES('other','hash')").run().lastInsertRowid);
 const cash=Number(db.prepare("INSERT INTO accounts(owner_id,name,type,liquid,opening_date) VALUES(?, 'Bank','bank',1,'2025-01-01')").run(owner).lastInsertRowid);
@@ -21,4 +21,19 @@ test("invalid dates, future dates, category mismatch and missing adjustment reas
 test("untyped request values are rejected before SQL writes",()=>{assert.throws(()=>createTransaction(owner,{kind:"admin",date:"2025-01-07",amount:1,accountId:cash,idempotencyKey:"bad-kind"} as never),/Invalid transaction/);assert.throws(()=>createTransaction(owner,{kind:"expense",date:"2025-01-07",amount:1,accountId:0,categoryId:expenseCat,idempotencyKey:"bad-account"}),/Invalid transaction/);assert.throws(()=>createTransaction(owner,{kind:"expense",date:"2025-01-07",amount:1,accountId:cash,categoryId:expenseCat,idempotencyKey:"bad-description",description:42} as never),/Invalid transaction/)});
 
 test("request keys cannot alias a different or voided transaction",()=>{const input={kind:"expense" as const,date:"2025-01-09",amount:10,accountId:cash,categoryId:expenseCat,idempotencyKey:"collision"};const tx=createTransaction(owner,input);assert.throws(()=>createTransaction(owner,{...input,amount:11}),/different or voided/);voidTransaction(owner,tx.id);assert.throws(()=>createTransaction(owner,input),/different or voided/);});
+test("currency/fee snapshots are authoritative; corrections are atomic, stale-safe and idempotent",()=>{
+ const input={kind:"expense" as const,date:"2025-06-01",amount:1,originalAmount:10500,originalCurrency:"USD",exchangeRate:"58",includedFee:500,accountId:cash,categoryId:expenseCat,idempotencyKey:"foreign-fee"};const before=balanceFor(owner,cash),tx=createTransaction(owner,input);
+ assert.equal(balanceFor(owner,cash),before-609000);assert.equal(db.prepare("SELECT COUNT(*) n FROM account_entries WHERE transaction_id=?").get(tx.id)?.n,1);
+ const row=db.prepare("SELECT * FROM transactions WHERE id=?").get(tx.id) as any;assert.equal(row.original_amount-row.included_fee,10000);assert.equal(row.amount,609000);
+ assert.throws(()=>createTransaction(owner,{...input,idempotencyKey:"bad-fee",includedFee:10501}));
+ assert.throws(()=>createTransaction(owner,{...input,feeEnabled:true,includedFee:0,idempotencyKey:"empty-checked-fee"}));assert.throws(()=>createTransaction(owner,{...input,feeEnabled:false,idempotencyKey:"unchecked-fee"}));
+ const version=transactionVersion(owner,tx.id),next={...input,originalAmount:10000,idempotencyKey:"correction-1"};const replacement=correctTransaction(owner,tx.id,next,version);assert.equal(correctTransaction(owner,tx.id,next,version).id,replacement.id);assert.equal(resolveTransaction(owner,tx.id),replacement.id);assert.equal(balanceFor(owner,cash),before-580000);
+ assert.ok(db.prepare("SELECT voided_at FROM transactions WHERE id=?").get(tx.id)?.voided_at);assert.throws(()=>correctTransaction(owner,tx.id,{...next,idempotencyKey:"stale"},version),/changed/);assert.throws(()=>correctTransaction(other,replacement.id,next,version),/not found/);
+ const v=transactionVersion(owner,replacement.id);assert.throws(()=>correctTransaction(owner,replacement.id,{...next,accountId:foreign,idempotencyKey:"invalid-correction"},v));assert.equal(transactionVersion(owner,replacement.id),v);
+ assert.throws(()=>voidTransaction(owner,replacement.id,"outdated"),/changed/);voidTransaction(owner,replacement.id,v);assert.equal(balanceFor(owner,cash),before);
+});
+test("transfer corrections update both accounts; opening/adjustment semantics stay protected",()=>{
+ const beforeCash=balanceFor(owner,cash),beforeCard=balanceFor(owner,card),input={kind:"transfer" as const,date:"2025-06-02",amount:100,accountId:cash,counterAccountId:card,idempotencyKey:"transfer-correct"};const tx=createTransaction(owner,input),replacement=correctTransaction(owner,tx.id,{...input,amount:200,idempotencyKey:"transfer-replacement"},transactionVersion(owner,tx.id));assert.equal(balanceFor(owner,cash),beforeCash-200);assert.equal(balanceFor(owner,card),beforeCard+200);voidTransaction(owner,replacement.id,transactionVersion(owner,replacement.id));assert.equal(balanceFor(owner,cash),beforeCash);
+ const opening=(db.prepare("SELECT * FROM transactions WHERE idempotency_key='open-cash'").get() as any);assert.throws(()=>correctTransaction(owner,opening.id,{kind:"expense",date:opening.posted_date,amount:1,accountId:cash,categoryId:expenseCat,idempotencyKey:"unsafe-opening"},transactionVersion(owner,opening.id)),/keep their type/);
+});
 test.after(()=>db.close());

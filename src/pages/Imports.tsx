@@ -21,7 +21,7 @@ function validPreview(value: unknown): value is Statement {
 
 export default function Imports() {
   const client=useQueryClient(),[mode,setMode]=useState("json"),[allowDuplicates,setAllowDuplicates]=useState(false),[csvBusy,setCsvBusy]=useState(false);
-  const history=useQuery({queryKey:["import-history"],queryFn:()=>api<{id:number;format:string;account_name:string;rows:number;created_at:string}[]>("import-history")});
+  const history=useQuery({queryKey:["import-history"],queryFn:()=>api<{id:number;format:string;account_name:string;rows:number;created_at:string;reconciliation_stale:number}[]>("import-history")});
   const accountQuery=useQuery({queryKey:["accounts"],queryFn:()=>api<Account[]>("accounts")}),categoryQuery=useQuery({queryKey:["categories"],queryFn:()=>api<Category[]>("categories")});
   const accounts=accountQuery.data??[],categories=categoryQuery.data??[];
   const  [card, setCard] = useState(""), [statement, setStatement] = useState<Statement | null>(null), [categoryMap, setCategoryMap] = useState<Record<string, string>>({}), [paymentMap, setPaymentMap] = useState<Record<string, string>>({}), [error, setError] = useState(""), [result, setResult] = useState<any>(null), [busy, setBusy] = useState(false), fileInput = useRef<HTMLInputElement>(null);
@@ -62,7 +62,7 @@ export default function Imports() {
 
   return <>
     <header className="page-heading"><div><p className="eyebrow">Statement review</p><h1>Imports</h1><p className="mt-3 text-sm text-muted-foreground">Review rows before saving. Files stay in memory and are not stored.</p></div></header>
-    <Tabs value={mode} onValueChange={setMode}><TabsList className="mb-5 h-auto"><TabsTrigger disabled={csvBusy} className="min-h-11" value="json">JSON statements</TabsTrigger><TabsTrigger disabled={busy} className="min-h-11" value="csv">CSV template</TabsTrigger></TabsList><TabsContent value={mode}>
+    <Tabs value={mode} onValueChange={setMode}><TabsList className="mb-5 h-auto"><TabsTrigger disabled={csvBusy} className="min-h-11" value="json">JSON statements · PHP</TabsTrigger><TabsTrigger disabled={busy} className="min-h-11" value="csv">CSV template · PHP</TabsTrigger></TabsList><TabsContent value={mode}>
     {mode==="csv"?<CsvImport onBusyChange={setCsvBusy}/>:<div>
     <section className="panel grid gap-5 sm:grid-cols-2">
       <label className="text-sm font-semibold">Credit card<select disabled={busy} value={card} onChange={e => setCard(e.target.value)} className="field"><option value="">Select account</option>{accounts.filter(a => a.type === "credit_card").map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
@@ -84,6 +84,6 @@ export default function Imports() {
     {error && <p role="alert" className="my-4 rounded-xl bg-destructive/10 p-3 text-destructive">{error}</p>}
     {result && <section role="status" className="rounded-3xl border bg-card p-5"><h2 className="font-bold">{result.duplicate ? "Statement already imported" : "Import complete"}</h2>{!result.duplicate && <p className="mt-2 text-sm">Reconciliation difference: {formatMoney(result.difference)} · expected {formatMoney(result.expectedClosing)} debt, recorded {formatMoney(result.actualClosing)} debt</p>}<p className="mt-1 text-xs text-muted-foreground">Differences never create automatic adjustments.</p></section>}
     </div>}</TabsContent></Tabs>
-    <section className="panel mt-5"><h2>Import history</h2><p className="mt-2 text-sm text-muted-foreground">Raw files are not stored. Legacy JSON row counts may be unavailable.</p>{history.isPending?<p role="status">Loading import history…</p>:history.error?<p role="alert" className="text-destructive">{history.error.message}</p>:history.data?.length?<ul className="mt-3 divide-y">{history.data.map(h=><li className="flex flex-wrap justify-between gap-3 py-3" key={`${h.format}-${h.id}`}><div><strong>{h.account_name}</strong><p className="text-xs text-muted-foreground">{h.created_at} · {h.format.toUpperCase()}</p></div><span>{h.rows||h.format==="csv"?`${h.rows} rows`:"Legacy row count unavailable"}</span></li>)}</ul>:<p className="mt-4">No imports recorded.</p>}</section>
+    <section className="panel mt-5"><h2>Import history</h2><p className="mt-2 text-sm text-muted-foreground">Raw files are not stored. Legacy JSON row counts may be unavailable.</p>{history.isPending?<p role="status">Loading import history…</p>:history.error?<p role="alert" className="text-destructive">{history.error.message}</p>:history.data?.length?<ul className="mt-3 divide-y">{history.data.map(h=><li className="flex flex-wrap justify-between gap-3 py-3" key={`${h.format}-${h.id}`}><div><strong>{h.account_name}</strong><p className="text-xs text-muted-foreground">{h.created_at} · {h.format.toUpperCase()} · PHP</p>{Boolean(h.reconciliation_stale)&&<p className="text-sm text-destructive">Reconciliation stale. Review corrected/deleted history against the original file; reimporting does not repair coverage.</p>}</div><span>{h.rows||h.format==="csv"?`${h.rows} rows`:"Legacy row count unavailable"}</span></li>)}</ul>:<p className="mt-4">No imports recorded.</p>}</section>
   </>;
 }

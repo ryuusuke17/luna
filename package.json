@@ -72,7 +72,8 @@
     "tailwindcss": "^3.4.11",
     "typescript": "^5.5.3",
     "typescript-eslint": "^8.0.1",
-    "vite": "^8.0.0"
+    "vite": "^8.0.0",
+    "@playwright/test": "^1.64.0"
   },
   "name": "vite_react_shadcn_ts",
   "private": true,
@@ -83,7 +84,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "start": "node .output/server/index.mjs",
-    "test": "node --experimental-strip-types --test server/lib/ledger.test.ts server/lib/imports.test.ts server/lib/planning.test.ts server/lib/csv-imports.test.ts server/lib/migrations.test.ts src/lib/messages.test.ts"
+    "test": "node --experimental-strip-types --test server/lib/ledger.test.ts server/lib/imports.test.ts server/lib/planning.test.ts server/lib/csv-imports.test.ts server/lib/migrations.test.ts src/lib/messages.test.ts src/lib/finance.test.ts server/lib/record-management.test.ts"
   },
   "type": "module",
   "version": "0.0.0"

@@ -28,3 +28,12 @@ backups/
 .env.*
 !.env.example
 .dyad/
+
+# Playwright test artifacts
+/e2e-tests/fixtures/dyad/preview-dns.cjs
+
+# Playwright test artifacts
+/test-results/
+/playwright-report/
+/playwright/.cache/
+.last-run.json
