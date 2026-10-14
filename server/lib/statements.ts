@@ -8,7 +8,7 @@ import {parseStatementCsv,statementDiscrepancies} from "./statement-csv.ts";
 import {isCalendarDate,parseMoney,MAX_MINOR} from "../../src/lib/finance.ts";
 
 type Row={date:string;description:string;merchant:string;kind:"income"|"expense"|"refund"|"transfer"|"unresolved";saleDate?:string;postDate?:string;sourceAmount?:number;notes?:string;categoryHint?:string;amount:number;direction:number;sourceId:string|null;categoryId?:number};
-type Decision={entryId:number;action:"import"|"link"|"skip";transactionId?:number;categoryId?:number;destinationId?:number;reviewedKind?:"refund"|"transfer";reason?:string};
+type Decision={entryId:number;action:"import"|"link"|"skip";transactionId?:number;categoryId?:number;destinationId?:number;reviewedKind?:"expense"|"refund"|"transfer";reason?:string};
 const hash=(v:string|Buffer)=>createHash("sha256").update(v).digest("hex");
 const integer=(v:unknown)=>typeof v==="number"&&Number.isSafeInteger(v)&&v>0;
 function account(owner:number,id:number){const a=db.prepare("SELECT * FROM accounts WHERE owner_id=? AND id=? AND archived_at IS NULL").get(owner,id) as any;if(!integer(id)||!a)throw Error("Account unavailable");return a;}
@@ -26,7 +26,7 @@ function normalize(owner:number,a:any,r:Record<string,string>):Row{
  return{date:r.date,description:r.description,merchant:r.merchant,kind,amount,direction:payment||kind==="income"||kind==="refund"?1:-1,sourceId:r.source_id?.trim()||null};
 }
 function reviewedRow(r:Row,kind?:string|null):Row{
- if(r.kind!=="unresolved")return r;
+ if(r.kind!=="unresolved")return r.kind==="expense"&&kind==="transfer"?{...r,kind:"transfer"}:r;
  if(kind!=="refund"&&kind!=="transfer")throw Error("Negative row requires explicit payment or refund classification");
  return{...r,kind};
 }
@@ -86,12 +86,13 @@ export function statementDetail(owner:number,id:number){
  const counts=new Map<string,number>();for(const e of stored){if(e.normalized_json){const key=signature(JSON.parse(e.normalized_json));counts.set(key,(counts.get(key)??0)+1);}}
  const entries=stored.map(e=>{
   const row=e.normalized_json?JSON.parse(e.normalized_json) as Row:null,raw=JSON.parse(e.raw_json);
-  const effective=row&&(row.kind!=="unresolved"?row:e.reviewed_kind?reviewedRow(row,e.reviewed_kind):null);
+  const effective=row&&(e.reviewed_kind?reviewedRow(row,e.reviewed_kind):row.kind!=="unresolved"?row:null);
   const matches=effective?candidates(owner,s.account_id,effective):row?(["refund","transfer"] as const).flatMap(kind=>candidates(owner,s.account_id,reviewedRow(row,kind))):[];
   const source=row?known(owner,s.account_id,row):null,repeated=!!row&&(counts.get(signature(row))??0)>1;
   const category=row?categoryResolution(owner,effective??row,row.categoryHint??raw.category??"",e.action?e.category_id??undefined:undefined):null;
   const blockers:{code:string;message:string}[]=[];
   if(!e.action){
+   if(e.review_required)blockers.push({code:"review",message:e.review_required});
    if(!row)blockers.push({code:"invalid",message:e.warnings||"Invalid source row; exclude with reason or upload a corrected file"});
    if(row?.kind==="unresolved")blockers.push({code:"classification",message:"Negative row requires explicit payment or refund classification"});
    if(category?.error)blockers.push({code:"category",message:category.error});
@@ -103,7 +104,7 @@ export function statementDetail(owner:number,id:number){
    if(matches.length||repeated)blockers.push({code:"duplicate",message:repeated?"Repeated transaction signature in this file; review each row":"Possible duplicate; link, exclude, or import separately with reason"});
    if(row&&(s.archived_at||db.prepare("SELECT 1 FROM accounts WHERE id=? AND archived_at IS NOT NULL").get(s.account_id)||db.prepare("SELECT 1 FROM reconciliations WHERE owner_id=? AND account_id=? AND state='finalized' AND period_end>=?").get(owner,s.account_id,row.date)))blockers.push({code:"history",message:"Account unavailable or financial history locked; reopen reconciliation before approval"});
   }
-  return{id:e.id,index:e.row_index,raw,row,warnings:e.warnings,action:e.action,transactionId:e.transaction_id,categoryId:e.category_id,destinationId:e.destination_id,reason:e.reason,reviewedKind:e.reviewed_kind,requestJson:e.request_json,candidates:matches,known:source,repeated,category,blockers,eligible:!e.action&&!blockers.length,queue:e.action?"resolved":!row?"invalid":row.kind==="unresolved"?"classification required":source?"already-imported":matches.some(m=>m.evidence.startsWith("Strong"))?"strong match":matches.length||repeated?"ambiguous":"new"};
+  return{id:e.id,index:e.row_index,raw,row,reviewRequired:e.review_required,warnings:e.warnings,action:e.action,transactionId:e.transaction_id,categoryId:e.category_id,destinationId:e.destination_id,reason:e.reason,reviewedKind:e.reviewed_kind,requestJson:e.request_json,candidates:matches,known:source,repeated,category,blockers,eligible:!e.action&&!blockers.length,queue:e.action?"resolved":!row?"invalid":row.kind==="unresolved"?"classification required":source?"already-imported":matches.some(m=>m.evidence.startsWith("Strong"))?"strong match":matches.length||repeated?"ambiguous":"new"};
  });
  const reconciliation=db.prepare("SELECT * FROM reconciliations WHERE owner_id=? AND statement_id=? ORDER BY id DESC LIMIT 1").get(owner,id);
  const {file_key,file_hash,owner_id,...metadata}=s,summary=s.summary_json?JSON.parse(s.summary_json):null,rawSummary=s.raw_summary_json?JSON.parse(s.raw_summary_json):null;
@@ -135,7 +136,7 @@ export function removeStatement(owner:number,id:number,input:{version:string}){
 export function commitStatement(owner:number,id:number,input:{version:string;decisions:Decision[]}){return db.transaction(()=>{
  const detail=statementDetail(owner,id);
  if(!Array.isArray(input?.decisions)||!input.decisions.length||input.decisions.length>5000)throw Error("Choose at least one unresolved row before approval");
- const decisions=new Map<number,Decision>();for(const d of input.decisions){if(!d||!integer(d.entryId)||!["import","link","skip"].includes(d.action)||typeof(d.reason??"")!=="string"||(d.reason??"").length>500||(d.reviewedKind!==undefined&&!["refund","transfer"].includes(d.reviewedKind))||[d.transactionId,d.categoryId,d.destinationId].some(v=>v!==undefined&&!integer(v))||decisions.has(d.entryId)||!detail.entries.some(e=>e.id===d.entryId))throw Error("Invalid review decision");decisions.set(d.entryId,d);}
+ const decisions=new Map<number,Decision>();for(const d of input.decisions){if(!d||!integer(d.entryId)||!["import","link","skip"].includes(d.action)||typeof(d.reason??"")!=="string"||(d.reason??"").length>500||(d.reviewedKind!==undefined&&!["expense","refund","transfer"].includes(d.reviewedKind))||[d.transactionId,d.categoryId,d.destinationId].some(v=>v!==undefined&&!integer(v))||decisions.has(d.entryId)||!detail.entries.some(e=>e.id===d.entryId))throw Error("Invalid review decision");decisions.set(d.entryId,d);}
  const payload=(d:Decision)=>JSON.stringify([d.action,d.transactionId??null,d.categoryId??null,d.destinationId??null,d.reviewedKind??null,d.reason?.trim()??""]);
  const submitted=detail.entries.filter(e=>decisions.has(e.id));
  for(const e of submitted.filter(e=>e.action)){const d=decisions.get(e.id)!;if(!e.requestJson||e.requestJson!==payload(d)||e.transactionId&&!db.prepare("SELECT 1 FROM transactions t JOIN account_entries a ON a.transaction_id=t.id WHERE t.owner_id=? AND t.id=? AND t.voided_at IS NULL AND a.account_id=? AND a.delta=? AND t.kind=? AND t.original_currency='PHP' AND t.posted_date BETWEEN date(?,'-3 days') AND date(?,'+3 days')").get(owner,e.transactionId,detail.account_id,(e.row?.amount??0)*(e.row?.direction??1),e.reviewedKind??e.row?.kind,e.row?.date,e.row?.date))throw Error("Saved row decision differs from this retry. Reload and review pending rows.");}
@@ -145,13 +146,14 @@ export function commitStatement(owner:number,id:number,input:{version:string;dec
  for(const entry of submitted.filter(e=>!e.action)){const d=decisions.get(entry.id)!;const r=entry.row&&d.action!=="skip"?reviewedRow(entry.row,d.reviewedKind):entry.row;let tx:number|undefined,categoryId:number|undefined,destinationId:number|undefined;
   if(d.action==="skip"){if(!d.reason?.trim())throw Error(`Row ${entry.index+1}: exclusion requires a reason`);excluded++;}
   else{if(!r)throw Error(`Row ${entry.index+1}: invalid row must be explicitly excluded`);
+   if(entry.reviewRequired&&(!d.reason?.trim()||!d.reviewedKind))throw Error("Installment requires explicit classification and reason before approval");
    if(db.prepare("SELECT 1 FROM reconciliations WHERE owner_id=? AND account_id=? AND state='finalized' AND period_end>=?").get(owner,a.id,r.date))throw Error("Reopen the affected statement reconciliation with a reason before changing financial history.");
    if(d.action==="link"){
     if(!integer(d.transactionId))throw Error("Choose an existing transaction");
     const t=db.prepare("SELECT t.*,e.delta FROM transactions t JOIN account_entries e ON e.transaction_id=t.id WHERE t.owner_id=? AND t.id=? AND e.account_id=? AND t.voided_at IS NULL").get(owner,d.transactionId,a.id) as any;
     const delta=r.amount*r.direction;if(!t||t.kind!==r.kind||t.original_currency!=="PHP"||t.delta!==delta||Math.abs(Date.parse(t.posted_date)-Date.parse(r.date))>3*86400000)throw Error("Match must use the same owned account, signed PHP amount, type and compatible posting date");
-    const prior=db.prepare("SELECT e.normalized_json,d.reviewed_kind FROM statement_decisions d JOIN statement_entries e ON e.id=d.entry_id JOIN statements s ON s.id=e.statement_id WHERE s.owner_id=? AND d.transaction_id=?").all(owner,t.id) as {normalized_json:string;reviewed_kind:string|null}[];
-    if(prior.some(p=>{const row=reviewedRow(JSON.parse(p.normalized_json) as Row,p.reviewed_kind);return row.date!==r.date||row.kind!==r.kind||row.amount!==r.amount||row.direction!==r.direction||(row.sourceId&&r.sourceId&&row.sourceId!==r.sourceId)||row.description!==r.description||row.merchant!==r.merchant;}))throw Error("Transaction already linked to an incompatible statement row");
+    const prior=db.prepare("SELECT e.normalized_json,d.reviewed_kind,s.account_id FROM statement_decisions d JOIN statement_entries e ON e.id=d.entry_id JOIN statements s ON s.id=e.statement_id WHERE s.owner_id=? AND d.transaction_id=?").all(owner,t.id) as {normalized_json:string;reviewed_kind:string|null;account_id:number}[];
+    if(prior.some(p=>{const row=reviewedRow(JSON.parse(p.normalized_json) as Row,p.reviewed_kind);if(p.account_id!==a.id)return t.kind!=="transfer"||row.kind!=="transfer"||r.kind!=="transfer"||row.amount!==r.amount||row.direction===r.direction||Math.abs(Date.parse(row.date)-Date.parse(r.date))>3*86400000;return row.date!==r.date||row.kind!==r.kind||row.amount!==r.amount||row.direction!==r.direction||(row.sourceId&&r.sourceId&&row.sourceId!==r.sourceId)||row.description!==r.description||row.merchant!==r.merchant;}))throw Error("Transaction already linked to an incompatible statement row");
     if(entry.known&&entry.known!==t.id)throw Error("Source reference conflicts with the selected transaction");tx=t.id;matched++;
    }else{
     if(known(owner,a.id,r))throw Error("Source already imported or conflicting; link or exclude this row");if((candidates(owner,a.id,r).length||entry.repeated)&&!d.reason?.trim())throw Error("Possible duplicate requires a reason to import separately");
@@ -159,7 +161,7 @@ export function commitStatement(owner:number,id:number,input:{version:string;dec
     tx=createTransaction(owner,{kind:r.kind as "income"|"expense"|"refund"|"transfer",date:r.date,amount:r.amount,accountId:r.kind==="transfer"&&r.direction===1?destinationId!:a.id,categoryId,counterAccountId:r.kind==="transfer"?(r.direction===1?a.id:destinationId):undefined,description:r.description,merchant:r.merchant,notes:r.notes,idempotencyKey:`statement:${id}:${entry.id}`}).id;imported++;
    }
   }
-  db.prepare("INSERT INTO statement_decisions(entry_id,statement_id,action,transaction_id,category_id,destination_id,reason,evidence,actor_id,reviewed_kind,request_json) VALUES(?,?,?,?,?,?,?,?,?,?,?)").run(entry.id,id,d.action,tx??null,d.action==="import"&&r?.kind!=="transfer"?categoryId??null:null,d.action==="import"&&r?.kind==="transfer"?destinationId??null:null,d.reason?.trim()??"",JSON.stringify(entry.candidates),owner,entry.row?.kind==="unresolved"&&d.action!=="skip"?r?.kind:null,payload(d));
+  db.prepare("INSERT INTO statement_decisions(entry_id,statement_id,action,transaction_id,category_id,destination_id,reason,evidence,actor_id,reviewed_kind,request_json) VALUES(?,?,?,?,?,?,?,?,?,?,?)").run(entry.id,id,d.action,tx??null,d.action==="import"&&r?.kind!=="transfer"?categoryId??null:null,d.action==="import"&&r?.kind==="transfer"?destinationId??null:null,d.reason?.trim()??"",JSON.stringify(entry.candidates),owner,(entry.row?.kind==="unresolved"||entry.reviewRequired)&&d.action!=="skip"?r?.kind:null,payload(d));
  }
  const remaining=detail.entries.filter(e=>!e.action&&!decisions.has(e.id)).length;
  db.prepare("UPDATE statements SET status=?,error='' WHERE id=?").run(remaining?"partially_imported":"imported",id);audit(owner,"statement.commit",id,{imported,matched,excluded,remaining});return{imported,matched,excluded,remaining,conflicts:statementDetail(owner,id).entries.filter(e=>!e.action&&!e.eligible).length,duplicate:false};

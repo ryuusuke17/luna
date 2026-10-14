@@ -25,7 +25,7 @@ async function workspace(page:Page){
   else if(/^goals\/\d+$/.test(path)&&method==="DELETE"){goals.splice(0);result={ok:true};}
   else if(path==="accounts/1/deletion-preview")result={account:{id:1,name:"Daily bank"},version:"account-preview",counts:{transactions:2,ledger_entries:3,bills:1,payments:1,statement_rows:1,csv_rows:1,statements:1,csv_batches:1},surviving:[{id:2,name:"Savings",before:10000,change:-500,after:9500}]};
   else if(path==="accounts/1"&&method==="DELETE"){accounts.splice(0);result={ok:true};}
-  else if(["merchant-rules","providers","bills","import-history"].includes(path)||path==="search")result=[];
+  else if(["payment-methods","merchant-rules","providers","bills","import-history"].includes(path)||path==="search")result=[];
   await route.fulfill({json:result});
  });return{requests,prefs,transactions,budgets,goals};
 }

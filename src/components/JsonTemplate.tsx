@@ -95,7 +95,7 @@ export default function JsonTemplate() {
           </button>
         </div>
       </div>
-      <pre tabIndex={0} role="region" aria-label="JSON template, scrollable" className="max-h-96 overflow-auto bg-muted/40 p-5 text-xs leading-relaxed text-foreground"><code>{json}</code></pre>
+      <pre tabIndex={0} role="region" aria-label="JSON template, scrollable" className="max-h-96 overflow-auto whitespace-pre-wrap break-words bg-muted/40 p-5 text-xs leading-relaxed text-foreground"><code>{json}</code></pre>
       <p className="px-5 pb-4 text-xs text-muted-foreground">Amounts use decimal strings. Supported transaction types: purchase, refund, payment, fee, interest.</p>
       {copyError && <p role="alert" className="px-5 pb-4 text-sm text-destructive">Clipboard access unavailable. Use Download instead.</p>}
     </section>

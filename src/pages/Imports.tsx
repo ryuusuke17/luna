@@ -1,4 +1,6 @@
 import {Link,useNavigate} from "react-router-dom";
+import BankStatements from "./BankStatements";
+import SampleWorkspaceReset from "@/components/SampleWorkspaceReset";
 import StatementImportDialog from "@/components/StatementImportDialog";
 import {useQuery,useQueryClient} from "@tanstack/react-query";
 import {Tabs,TabsList,TabsTrigger,TabsContent} from "@/components/ui/tabs";
@@ -62,10 +64,12 @@ export default function Imports() {
   }
 
   return <>
-    <header className="page-heading"><div><p className="eyebrow">Statement review</p><h1>Imports</h1><p className="mt-3 text-sm text-muted-foreground">Full statements archive privately; legacy CSV/JSON files remain in-memory workflows.</p></div><StatementImportDialog onUploaded={(id,duplicate)=>navigate(`/statements?statement=${id}${duplicate?"&duplicate=1":""}`)}/></header>
-    <Tabs value={mode} onValueChange={setMode}><TabsList className="mb-5 h-auto"><TabsTrigger disabled={csvBusy} className="min-h-11" value="json">Legacy JSON statements · PHP</TabsTrigger><TabsTrigger disabled={busy} className="min-h-11" value="csv">Legacy flat CSV · PHP</TabsTrigger></TabsList><TabsContent value={mode}>
+    <header className="page-heading"><div><p className="eyebrow">Statement review</p><h1>Imports</h1><p className="mt-3 text-sm text-muted-foreground">Full statements archive privately; legacy CSV/JSON files remain in-memory workflows.</p></div><StatementImportDialog onUploaded={(id,duplicate)=>navigate(`/imports?statement=${id}${duplicate?"&duplicate=1":""}`)}/></header>
+    <SampleWorkspaceReset/>
+    <BankStatements importMode/>
+    <Tabs value={mode} onValueChange={setMode}><TabsList className="mb-5 h-auto max-w-full flex-wrap"><TabsTrigger disabled={csvBusy} className="min-h-11 whitespace-normal" value="json">Legacy JSON statements · PHP</TabsTrigger><TabsTrigger disabled={busy} className="min-h-11 whitespace-normal" value="csv">Legacy flat CSV · PHP</TabsTrigger></TabsList><TabsContent value={mode}>
     {mode==="csv"?<CsvImport onBusyChange={setCsvBusy}/>:<div>
-    <section className="panel grid gap-5 sm:grid-cols-2">
+    <section className="panel grid min-w-0 gap-5 sm:grid-cols-2 [&>label]:min-w-0 [&_input]:min-w-0">
       <label className="text-sm font-semibold">Credit card<select disabled={busy} value={card} onChange={e => setCard(e.target.value)} className="field"><option value="">Select account</option>{accounts.filter(a => a.type === "credit_card").map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
       <label className="text-sm font-semibold" onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();if(!busy)choose(e.dataTransfer.files[0]);}}>Choose or drop statement JSON<input ref={fileInput} disabled={busy} type="file" accept="application/json,.json" onChange={e => choose(e.target.files?.[0])} className="mt-2 block w-full text-sm" /></label>
     </section>

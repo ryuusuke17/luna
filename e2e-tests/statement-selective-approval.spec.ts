@@ -22,7 +22,7 @@ test("row then eligible bulk approval retains conflicts, funding overrides, edit
   }else result={id:1,filename:"selective.csv",account_id:1,account_name:"Card",account_type:"credit_card",status:saved.size===3?"imported":saved.size?"partially_imported":"ready_for_review",version:`v${saved.size}`,entries:entries.map(e=>({...e,...(saved.has(e.id)?{action:"import",transactionId:10+e.id,categoryId:saved.get(e.id).categoryId,destinationId:saved.get(e.id).destinationId}:{})})),discrepancies:[],funding_account_id:null};
  }
  await route.fulfill({json:result});});
- await page.setViewportSize({width:320,height:500});await page.goto("/statements?statement=1");
+ await page.setViewportSize({width:320,height:500});await page.goto("/imports?statement=1");
  const table=page.getByRole("region",{name:"Statement transaction table · horizontally scrollable"}),heading=page.getByRole("heading",{name:"Transaction review",exact:true});
  await expect(page.getByRole("button",{name:"Approve all eligible (1)"})).toBeEnabled();await expect(page.getByRole("button",{name:"Approve row 2",exact:true})).toBeDisabled();
  await page.getByRole("button",{name:"Resolve row 2",exact:true}).focus();await page.keyboard.press("Space");await page.getByRole("textbox",{name:"Reason for row 2",exact:true}).fill("Retain pending edit");

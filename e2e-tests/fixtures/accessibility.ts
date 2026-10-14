@@ -4,6 +4,7 @@ import {expect,type Locator,type Page} from "@playwright/test";
 export async function reviewDialog(dialog:Locator){
  await expect(dialog).toHaveAccessibleName(/.+/);
  await expect(dialog).toHaveAccessibleDescription(/.+/);
+ await dialog.evaluate(async root=>{await Promise.all(root.getAnimations({subtree:true}).map(animation=>animation.finished.catch(()=>{})));});
  const failures=await dialog.evaluate(root=>{
   const issues:string[]=[];
   const rgb=(value:string)=>{const parts=value.match(/[\d.]+/g)?.map(Number)??[];return [parts[0]??0,parts[1]??0,parts[2]??0,parts[3]??1];};

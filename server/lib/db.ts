@@ -64,3 +64,11 @@ addColumn("statement_decisions","reviewed_kind","TEXT");
 
 addColumn("statements","funding_account_id","INTEGER REFERENCES accounts(id)");
 addColumn("statement_decisions","request_json","TEXT");
+db.exec(`
+CREATE TABLE IF NOT EXISTS payment_methods(id INTEGER PRIMARY KEY,owner_id INTEGER NOT NULL REFERENCES users(id),account_id INTEGER NOT NULL REFERENCES accounts(id),type TEXT NOT NULL CHECK(type IN('debit','credit')),display_name TEXT NOT NULL,last4 TEXT CHECK(last4 IS NULL OR (length(last4)=4 AND last4 NOT GLOB '*[^0-9]*')),archived_at TEXT);
+CREATE TABLE IF NOT EXISTS statement_payment_allocations(id INTEGER PRIMARY KEY,owner_id INTEGER NOT NULL REFERENCES users(id),statement_id INTEGER NOT NULL REFERENCES statements(id),transaction_id INTEGER NOT NULL REFERENCES transactions(id),amount INTEGER NOT NULL CHECK(amount>0),request_key TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,reversed_at TEXT,reverse_reason TEXT,UNIQUE(owner_id,request_key));
+CREATE TABLE IF NOT EXISTS workspace_resets(id INTEGER PRIMARY KEY,owner_id INTEGER NOT NULL REFERENCES users(id),request_key TEXT NOT NULL,backup_key TEXT NOT NULL,result_json TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,UNIQUE(owner_id,request_key));
+`);
+addColumn("transactions","payment_method_id","INTEGER REFERENCES payment_methods(id)");
+
+addColumn("statement_entries","review_required","TEXT NOT NULL DEFAULT ''");
