@@ -11,6 +11,7 @@ import Analytics from "./pages/Analytics";
 import Budgets from "./pages/Budgets";
 import Settings from "./pages/Settings";
 import Imports from "./pages/Imports";
+import BankStatements from "./pages/BankStatements";
 import Bills from "./pages/Bills";
 import Goals from "./pages/Goals";
 import Help from "./pages/Help";
@@ -18,4 +19,4 @@ import NotFound from "./pages/NotFound";
 import Protected from "@/components/Protected";
 import AppLayout from "@/components/AppLayout";
 const queryClient=new QueryClient();
-export default function App(){return <QueryClientProvider client={queryClient}><TooltipProvider><Toaster/><Sonner/><BrowserRouter><Routes><Route path="/login" element={<Login/>}/><Route element={<Protected><AppLayout/></Protected>}><Route index element={<Index/>}/><Route path="/accounts" element={<Accounts/>}/><Route path="/transactions" element={<Transactions/>}/><Route path="/analytics" element={<Analytics/>}/><Route path="/budgets" element={<Budgets/>}/><Route path="/bills" element={<Bills/>}/><Route path="/goals" element={<Goals/>}/><Route path="/imports" element={<Imports/>}/><Route path="/settings" element={<Settings/>}/><Route path="/help" element={<Help/>}/></Route><Route path="*" element={<NotFound/>}/></Routes></BrowserRouter></TooltipProvider></QueryClientProvider>;}
+export default function App(){return <QueryClientProvider client={queryClient}><TooltipProvider><Toaster/><Sonner/><BrowserRouter><Routes><Route path="/login" element={<Login/>}/><Route element={<Protected><AppLayout/></Protected>}><Route index element={<Index/>}/><Route path="/accounts" element={<Accounts/>}/><Route path="/transactions" element={<Transactions/>}/><Route path="/analytics" element={<Analytics/>}/><Route path="/budgets" element={<Budgets/>}/><Route path="/bills" element={<Bills/>}/><Route path="/goals" element={<Goals/>}/><Route path="/imports" element={<Imports/>}/><Route path="/statements" element={<BankStatements/>}/><Route path="/settings" element={<Settings/>}/><Route path="/help" element={<Help/>}/></Route><Route path="*" element={<NotFound/>}/></Routes></BrowserRouter></TooltipProvider></QueryClientProvider>;}

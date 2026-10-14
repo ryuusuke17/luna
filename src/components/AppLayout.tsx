@@ -7,7 +7,7 @@ import {Button} from "@/components/WorkspaceButton";
 import LunaLogo from "@/components/LunaLogo";
 import TransactionDialog from "@/components/TransactionDialog";
 import {api,send} from "@/lib/api";
-const workspace=[["/","Dashboard",Home],["/budgets","Budgets",PiggyBank],["/bills","Bills",Receipt],["/goals","Goals",Target],["/transactions","Transactions",ArrowLeftRight],["/accounts","Accounts",WalletCards],["/analytics","Analytics",ChartNoAxesCombined]] as const;
+const workspace=[["/","Dashboard",Home],["/budgets","Budgets",PiggyBank],["/bills","Bills",Receipt],["/goals","Goals",Target],["/transactions","Transactions",ArrowLeftRight],["/statements","Bank Statements",FileUp],["/accounts","Accounts",WalletCards],["/analytics","Analytics",ChartNoAxesCombined]] as const;
 const manage=[["/settings","Settings",Settings],["/imports","Imports",FileUp],["/help","Help",HelpCircle]] as const;
 type Result={type:string;id:number;label:string;detail:string};
 export default function AppLayout(){
