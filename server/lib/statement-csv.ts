@@ -1,10 +1,10 @@
 import {decimalMoney,tokenizeCsv} from "../../src/lib/csv.ts";
 import {isCalendarDate,parseMoney,MAX_MINOR} from "../../src/lib/finance.ts";
 
-export type StatementSummary={title?:string;statementDate?:string;dueDate?:string;creditLimit?:number;previousBalance?:number;newCharges?:number;paymentsCredits?:number;outstandingBalance?:number;minimumDue?:number;notes?:string};
-export type StatementRow={date:string;saleDate?:string;postDate:string;description:string;merchant:string;kind:"expense"|"transfer"|"unresolved";amount:number;direction:number;sourceAmount:number;notes?:string;sourceId:null};
-const labels:Record<string,keyof StatementSummary>={"statement month":"title","statement title":"title","statement month/title":"title","statement date":"statementDate","due date":"dueDate","payment due date":"dueDate","credit limit":"creditLimit","previous balance":"previousBalance","new charges":"newCharges","payments/credits":"paymentsCredits","payments / credits":"paymentsCredits","payments and credits":"paymentsCredits","outstanding balance":"outstandingBalance","minimum due":"minimumDue","minimum amount due":"minimumDue","statement notes":"notes"};
-const headers:Record<string,string>={"sale date":"saleDate","post date":"postDate","posting date":"postDate","description":"description","amount":"amount","amount (php)":"amount","transaction notes":"notes","notes":"notes"};
+export type StatementSummary={issuer?:string;title?:string;statementDate?:string;dueDate?:string;creditLimit?:number;previousBalance?:number;newCharges?:number;paymentsCredits?:number;outstandingBalance?:number;minimumDue?:number;notes?:string};
+export type StatementRow={date:string;saleDate?:string;postDate:string;description:string;merchant:string;kind:"expense"|"transfer"|"unresolved";amount:number;direction:number;sourceAmount:number;notes?:string;categoryHint?:string;sourceId:null};
+const labels:Record<string,keyof StatementSummary>={"issuer":"issuer","statement month":"title","statement title":"title","statement month/title":"title","statement date":"statementDate","due date":"dueDate","payment due date":"dueDate","credit limit":"creditLimit","previous balance":"previousBalance","new charges":"newCharges","payments/credits":"paymentsCredits","payments / credits":"paymentsCredits","payments and credits":"paymentsCredits","outstanding balance":"outstandingBalance","minimum due":"minimumDue","minimum amount due":"minimumDue","statement notes":"notes"};
+const headers:Record<string,string>={"sale date":"saleDate","post date":"postDate","posting date":"postDate","description":"description","amount":"amount","amount (php)":"amount","category":"categoryHint","transaction notes":"notes","notes":"notes"};
 const label=(s:string)=>s.trim().toLowerCase().replace(/:$/,"").replace(/\s+/g," ");
 export function statementDate(value:string){
  let date=value.trim();if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){
@@ -40,23 +40,23 @@ export function parseStatementCsv(text:string){
     if(!c[i].trim())continue;const key=labels[label(c[i])];if(!key)throw Error(`Row ${index+1}: unknown summary field ${c[i]}`);
     if(Object.hasOwn(summary,key))throw Error(`Row ${index+1}: duplicate summary field ${c[i]}`);
     let j=i+1;while(j<c.length&&!c[j].trim())j++;
-    if((j===c.length||labels[label(c[j])])&&(key==="notes"||key==="title")){continue;}
+    if((j===c.length||labels[label(c[j])])&&(key==="notes"||key==="title"||key==="issuer")){continue;}
     if(j===c.length||labels[label(c[j])])throw Error(`Row ${index+1}: missing value for ${c[i]}; omit optional fields instead`);
-    const value=c[j];if(key==="title"||key==="notes"){if(value.length>(key==="title"?240:2000))throw Error(`Row ${index+1}: summary text too long`);summary[key]=value;}
+    const value=c[j];if(key==="title"||key==="notes"||key==="issuer"){if(value.length>(key==="notes"?2000:240))throw Error(`Row ${index+1}: summary text too long`);summary[key]=value;}
     else if(key==="statementDate"||key==="dueDate")summary[key]=statementDate(value);
     else summary[key]=statementMoney(value);
     i=j;
    }
   }else{
    if(rows.length>=5000)throw Error("CSV exceeds 5,000 transaction rows");
-   const raw:Record<string,string>={};c.forEach((value,i)=>{if(columns![i])raw[columns![i]]=value;else if(value.trim())raw[`unknown column ${i+1}`]=value;});
+   const raw:Record<string,string>={};c.forEach((value,i)=>{if(columns![i])raw[columns![i]]=value;else raw[`unknown column ${i+1}`]=value;});
    let row:StatementRow|undefined,warning="";
    try{
     if(c.some((v,i)=>v.trim()&&!columns![i]))throw Error("Unknown nonempty transaction column; correct the file, no fields are discarded");
     const postDate=statementDate(raw.postDate??""),saleDate=raw.saleDate?.trim()?statementDate(raw.saleDate):undefined,sourceAmount=statementMoney(raw.amount??"",true);
     if(!sourceAmount)throw Error("Transaction amount must be nonzero");
-    if(!(raw.description??"").trim()||raw.description.length>240||(raw.notes??"").length>500)throw Error("Description required (240 characters maximum); transaction notes maximum 500 characters");
-    row={date:postDate,postDate,saleDate,description:raw.description,merchant:"",kind:sourceAmount>0?"expense":raw.description.trim().toUpperCase()==="PAYMENT RECEIVED - THANK YOU"?"transfer":"unresolved",amount:Math.abs(sourceAmount),direction:sourceAmount>0?-1:1,sourceAmount,notes:raw.notes||undefined,sourceId:null};
+    if(!(raw.description??"").trim()||raw.description.length>240||(raw.notes??"").length>500||(raw.categoryHint??"").length>60)throw Error("Description required (240 characters maximum); transaction notes maximum 500 characters; category maximum 60 characters");
+    row={date:postDate,postDate,saleDate,description:raw.description,merchant:"",kind:sourceAmount>0?"expense":raw.description.trim().toUpperCase()==="PAYMENT RECEIVED - THANK YOU"?"transfer":"unresolved",amount:Math.abs(sourceAmount),direction:sourceAmount>0?-1:1,sourceAmount,notes:raw.notes||undefined,categoryHint:raw.categoryHint,sourceId:null};
    }catch(e){warning=`Row ${index+1}: ${(e as Error).message}`;}
    rows.push({raw,row,warning});
   }

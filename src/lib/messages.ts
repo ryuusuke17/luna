@@ -72,6 +72,14 @@ const explanations: Record<string, string> = {
   "Invalid type": "Choose one of the available transaction types.",
   "Invalid statement JSON v1": "This file does not match Luna’s JSON statement format. Compare it with the JSON template and correct the required fields.",
   "Invalid statement": "Choose a JSON statement matching Luna’s template.",
+  "Payment funding required": "Payment funding required. Choose a distinct active cash, bank or wallet account.",
+  "Credit payment requires a distinct cash, bank or wallet funding account.": "Choose a distinct active cash, bank or wallet funding account.",
+  "Statement or matches changed. Reload and review before approving.": "Statement or matches changed. Evidence refreshed; review pending rows before retrying.",
+  "Saved row decision differs from this retry. Reload and review pending rows.": "Saved row decision differs from this retry. Reload and review pending rows.",
+  "Negative row requires explicit payment or refund classification": "Choose payment or refund classification for this negative row.",
+  "Source already imported or conflicting; link or exclude this row": "Source already imported or conflicting; link or exclude this row.",
+  "Possible duplicate requires a reason to import separately": "Possible duplicate requires a reason to import separately. Review source evidence before retrying.",
+  "Invalid review decision": "Check row membership, category, funding and resolution values before retrying.",
   "Statement unavailable": "This statement is unavailable. Reload the archive and choose an existing upload.",
   "Statement unavailable. Check private storage or retry.": "Statement unavailable. Check private storage or retry.",
   "Only unapproved uploads can be removed. Approved or reconciled statements must be kept.": "Only unapproved uploads can be removed. Approved or reconciled statements must be kept.",
@@ -114,6 +122,7 @@ export function clearMessage(value: unknown): string | undefined {
   if (/^Invalid (page|id|account|category)$/.test(message)) return "Choose an existing record or reset the filters, then try again.";
   if (/^(Request failed|HTTP(?:Error| error)?|Bad Request|Unauthorized|Forbidden|Not Found|Internal Server Error|Service Unavailable|Bad Gateway|Gateway Timeout|Request Timeout|Conflict|Too Many Requests|Unprocessable (Entity|Content)|Unsupported Media Type|Request Entity Too Large|Method not allowed|Not found|Error|Import failed|\d{3})$/i.test(message)) return;
   if (/HTTPError|\bHTTP\s*\d{3}|\[\d{3}\]|https?:\/\/|Request failed \(\d+\)|SQLITE|\bSQL\b|constraint failed|\bSELECT\b.+\bFROM\b|\bINSERT INTO\b|\bUPDATE\b.+\bSET\b|\bTypeError\b|\bReferenceError\b|\bSyntaxError\b|\bstack\b|\bat \S+\(|node_modules|[A-Z]:\\|<html|<!doctype|fetch failed|Failed to fetch|Load failed|NetworkError|Unexpected token|JSON\.parse|JSON at position|JSON at line|Unexpected end of JSON|Cannot read properties|Cannot convert|is not a function|is not defined|ENOENT|ECONN|EACCES|ERR_|binding|native module/i.test(message)) return;
+  if (/^(Unknown|Ambiguous) category: [^\r\n]{1,60}$/.test(message)) return `${message}. Choose an explicit active category matching the row type.`;
   if (/^(Choose |Select |Use |Enter |Check |Luna |Your session |Cannot reach Luna\.|Too many |This |The file |Payment row \d+ needs |Paid reminders |Allocation date |Total allocation |Statement total |Possible (CSV content |content )?duplicate |Source transaction already imported:)/.test(message)) return message;
 }
 

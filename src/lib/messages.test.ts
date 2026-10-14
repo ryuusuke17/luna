@@ -73,3 +73,5 @@ test("API translates actual responses, unreadable replies, network failures and 
 test("statement removal errors retain safe actionable recovery",()=>{
  for(const message of ["Statement unavailable. Check private storage or retry.","Only unapproved uploads can be removed. Approved or reconciled statements must be kept.","Statement changed. Close this dialog and review it again before removing."])assert.equal(requestMessage(400,{statusMessage:message},"statements/1","POST"),message);
 });
+
+test("statement approval conflicts stay actionable without exposing internals",()=>{assert.match(clearMessage("Unknown category: Travel")!,/Choose an explicit active category/);assert.match(clearMessage("Ambiguous category: Food")!,/Ambiguous/);assert.match(clearMessage("Payment funding required")!,/cash, bank or wallet/);assert.match(clearMessage("Statement or matches changed. Reload and review before approving.")!,/Evidence refreshed/);assert.equal(clearMessage("Unknown category: SQLITE constraint failed"),undefined);});

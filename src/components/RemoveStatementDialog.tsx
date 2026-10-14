@@ -21,7 +21,7 @@ export default function RemoveStatementDialog({id,filename,disabled,onRemoved}:{
  <DialogTrigger asChild><Button variant="outline" disabled={disabled} aria-label={`Remove ${filename}`}>Remove</Button></DialogTrigger>
  <WorkspaceDialogContent className="max-w-lg break-words [&_button]:max-w-full [&_button]:whitespace-normal [&>button]:hidden" onFocusCapture={e=>{const bounds=e.currentTarget.getBoundingClientRect(),target=e.target.getBoundingClientRect();if(target.top<bounds.top||target.bottom>bounds.bottom)e.target.scrollIntoView({block:"nearest"});}} onEscapeKeyDown={e=>{if(busy)e.preventDefault();}} onInteractOutside={e=>{if(busy)e.preventDefault();}} onCloseAutoFocus={e=>{if(removed.current){e.preventDefault();onRemoved();client.removeQueries({queryKey:["statement-removal",id]});void client.invalidateQueries({queryKey:["statements"]});}}}>
  <DialogTitle>Remove uploaded statement?</DialogTitle>
- <DialogDescription>This permanently deletes the original CSV and staged rows. It cannot be undone. Ledger transactions stay unchanged. Approved or reconciled statements cannot be removed.</DialogDescription>
+ <DialogDescription>This permanently deletes the original CSV and staged rows. It cannot be undone. Ledger transactions stay unchanged. Partially approved, approved or reconciled statements cannot be removed.</DialogDescription>
  <p className="break-all font-semibold">{filename}</p>
  {detail.isFetching&&<p role="status">Checking statement…</p>}
  {detail.error&&<p role="alert" className="text-destructive">{detail.error.message}</p>}

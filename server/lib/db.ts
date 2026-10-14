@@ -61,3 +61,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS reconciliation_active_idx ON reconciliations(s
 addColumn("statements","summary_json","TEXT");
 addColumn("statements","raw_summary_json","TEXT");
 addColumn("statement_decisions","reviewed_kind","TEXT");
+
+addColumn("statements","funding_account_id","INTEGER REFERENCES accounts(id)");
+addColumn("statement_decisions","request_json","TEXT");
