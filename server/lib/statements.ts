@@ -70,6 +70,25 @@ function known(owner:number,accountId:number,r:Row){
 export function statementDetail(owner:number,id:number){const s=statement(owner,id);const entries=(db.prepare("SELECT e.*,d.action,d.transaction_id,d.reason,d.reviewed_kind FROM statement_entries e LEFT JOIN statement_decisions d ON d.entry_id=e.id WHERE e.statement_id=? ORDER BY e.row_index").all(id) as any[]).map(e=>{const row=e.normalized_json?JSON.parse(e.normalized_json) as Row:null;const effective=row&&row.kind!=="unresolved"?row:row&&e.reviewed_kind?reviewedRow(row,e.reviewed_kind):null;const matches=effective?candidates(owner,s.account_id,effective):row?(["refund","transfer"] as const).flatMap(kind=>candidates(owner,s.account_id,reviewedRow(row,kind))):[];return{id:e.id,index:e.row_index,raw:JSON.parse(e.raw_json),row,warnings:e.warnings,action:e.action,transactionId:e.transaction_id,reason:e.reason,reviewedKind:e.reviewed_kind,candidates:matches,known:row?known(owner,s.account_id,row):null,queue:e.action?"resolved":!row?"invalid":row?.kind==="unresolved"&&!e.reviewed_kind?"classification required":row&&known(owner,s.account_id,row)?"already-imported":matches.some(m=>m.evidence.startsWith("Strong"))?"strong match":matches.length?"ambiguous":"new"};});const reconciliation=db.prepare("SELECT * FROM reconciliations WHERE owner_id=? AND statement_id=? ORDER BY id DESC LIMIT 1").get(owner,id);const {file_key,file_hash,owner_id,...metadata}=s;const summary=s.summary_json?JSON.parse(s.summary_json):null,rawSummary=s.raw_summary_json?JSON.parse(s.raw_summary_json):null,discrepancies=statementDiscrepancies(summary,entries.map(e=>e.row));return{...metadata,summary,rawSummary,discrepancies,entries,reconciliation,version:hash(JSON.stringify([metadata,entries,reconciliation]))};}
 export function reprocessStatement(owner:number,id:number){return db.transaction(()=>{const s=statement(owner,id);if(!["failed","needs_attention","ready_for_review"].includes(s.status))throw Error("Committed statements cannot be reprocessed; upload a corrected file separately.");if(db.prepare("SELECT 1 FROM statement_decisions WHERE statement_id=?").get(id))throw Error("Reviewed entries cannot be rewritten");db.prepare("DELETE FROM statement_entries WHERE statement_id=?").run(id);stage(owner,s,readFileSync(filePath(s.file_key)));audit(owner,"statement.reprocess",id,{parser:statement(owner,id).parser_version});return{ok:true};}).immediate();}
 export function downloadStatement(owner:number,id:number){const s=statement(owner,id);return{filename:s.filename,bytes:readFileSync(filePath(s.file_key))};}
+export function removeStatement(owner:number,id:number,input:{version:string}){
+ let deletedFile:{path:string;bytes:Buffer}|undefined;
+ try{return db.transaction(()=>{
+  const s=statement(owner,id);
+  if(!["failed","needs_attention","ready_for_review"].includes(s.status)||db.prepare("SELECT 1 FROM statement_decisions WHERE statement_id=?").get(id)||db.prepare("SELECT 1 FROM reconciliations WHERE statement_id=?").get(id))throw Error("Only unapproved uploads can be removed. Approved or reconciled statements must be kept.");
+  if(input?.version!==statementDetail(owner,id).version)throw Error("Statement changed. Close this dialog and review it again before removing.");
+  const path=filePath(s.file_key);let bytes:Buffer|undefined;
+  try{bytes=readFileSync(path);}catch(e){if((e as NodeJS.ErrnoException).code!=="ENOENT")throw e;}
+  db.prepare("DELETE FROM statement_entries WHERE statement_id=?").run(id);
+  db.prepare("DELETE FROM statements WHERE owner_id=? AND id=?").run(owner,id);
+  audit(owner,"statement.remove",id,{filename:s.filename,hash:s.file_hash,status:s.status});
+  if(bytes){unlinkSync(path);deletedFile={path,bytes};}
+  return{ok:true};
+ }).immediate();}catch(e){
+  // Restore the private file if SQLite fails to commit after unlinking it.
+  if(deletedFile)writeFileSync(deletedFile.path,deletedFile.bytes,{flag:"wx",mode:0o600});
+  throw e;
+ }
+}
 export function commitStatement(owner:number,id:number,input:{version:string;decisions:Decision[]}){return db.transaction(()=>{
  const detail=statementDetail(owner,id);if(["imported","reconciled"].includes(detail.status))return{duplicate:true,imported:0};
  if(input?.version!==detail.version)throw Error("Statement or matches changed. Reload and review before approving.");

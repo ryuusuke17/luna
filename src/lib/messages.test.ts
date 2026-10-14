@@ -69,3 +69,7 @@ test("API translates actual responses, unreadable replies, network failures and 
     else Reflect.deleteProperty(globalThis, "document");
   }
 });
+
+test("statement removal errors retain safe actionable recovery",()=>{
+ for(const message of ["Statement unavailable. Check private storage or retry.","Only unapproved uploads can be removed. Approved or reconciled statements must be kept.","Statement changed. Close this dialog and review it again before removing."])assert.equal(requestMessage(400,{statusMessage:message},"statements/1","POST"),message);
+});

@@ -1,10 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {mkdtempSync,rmSync} from "node:fs";
+import {mkdtempSync,rmSync,existsSync,mkdirSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 const dir=mkdtempSync(join(tmpdir(),"luna-statements-"));process.env.LUNA_DB_PATH=":memory:";process.env.LUNA_STATEMENTS_PATH=dir;
-const {db}=await import("./db.ts"),{createTransaction,balanceFor,correctTransaction,transactionVersion,voidTransaction}=await import("./ledger.ts"),{uploadStatement,statementDetail,commitStatement,reconcileStatement,reopenStatement,downloadStatement,reprocessStatement}=await import("./statements.ts"),{accountDeletionPreview}=await import("./account-deletion.ts");
+const {db}=await import("./db.ts"),{createTransaction,balanceFor,correctTransaction,transactionVersion,voidTransaction}=await import("./ledger.ts"),{uploadStatement,statementDetail,commitStatement,reconcileStatement,reopenStatement,downloadStatement,reprocessStatement,removeStatement,listStatements}=await import("./statements.ts"),{accountDeletionPreview}=await import("./account-deletion.ts");
 db.exec("INSERT INTO users(id,username,password_hash) VALUES(1,'owner','hash'),(2,'other','hash');INSERT INTO accounts(id,owner_id,name,type,opening_date) VALUES(1,1,'Bank','bank','2025-01-01'),(2,2,'Foreign','bank','2025-01-01'),(3,1,'Card','credit_card','2025-01-01'),(4,1,'Repeated','bank','2025-01-01');INSERT INTO categories(id,owner_id,name,kind) VALUES(1,1,'Food','expense'),(2,1,'Salary','income'),(3,2,'Foreign','expense');");
 const {parseStatementCsv,statementDate,statementMoney,statementDiscrepancies}=await import("./statement-csv.ts");
 const header="date,description,merchant,type,amount,category,source_id,destination\n";
@@ -66,5 +66,19 @@ test("complete snapshots stage privately; negatives require reviewed decisions, 
 });
 test("mismatched summary preserved; approval allowed but final reconciliation blocked without balancing writes",()=>{
  db.exec("INSERT INTO accounts(id,owner_id,name,type,opening_date) VALUES(6,1,'Mismatch card','credit_card','2025-01-01')");const u=upload(6,'Previous balance,0\nNew charges,10\nPayments/credits,0\nOutstanding balance,11\nSale date,Post date,Description,Amount,Notes\n,2025-03-02,Purchase,10,\n',"mismatch.csv"),s=statementDetail(1,u.id);assert.equal(s.summary.outstandingBalance,1100);assert.ok(s.discrepancies.length);commitStatement(1,u.id,{version:s.version,decisions:[{entryId:s.entries[0].id,action:"import",categoryId:1}]});assert.throws(()=>reconcileStatement(1,u.id,{version:statementDetail(1,u.id).version,start:"2025-03-01",end:"2025-03-03",opening:"0",closing:"11"}),/Summary outstanding/);assert.equal(balanceFor(1,6),-1000);assert.equal(db.prepare("SELECT count(*) n FROM transactions WHERE account_id=6").get()!.n,1);
+});
+test("removal deletes only owned unapproved uploads and files; preserves ledger, protected history and audit",()=>{
+ const ledger=db.prepare("SELECT * FROM transactions ORDER BY id").all(),balances=db.prepare("SELECT * FROM account_entries ORDER BY id").all();
+ for(const status of ["ready_for_review","needs_attention","failed"]){
+  const text=status==="failed"?"unsupported\nfile\n":header+(status==="needs_attention"?"bad-date":"2025-04-01")+",Remove "+status+",Cafe,expense,1,Food,remove-"+status+",\n";
+  const u=upload(4,text,"remove-"+status+".csv"),detail=statementDetail(1,u.id),path=join(dir,(db.prepare("SELECT file_key FROM statements WHERE id=?").get(u.id) as {file_key:string}).file_key);
+  assert.equal(detail.status,status);assert.throws(()=>removeStatement(2,u.id,{version:detail.version}),/unavailable/);assert.throws(()=>removeStatement(1,u.id,{version:"stale"}),/changed/);assert.ok(existsSync(path));
+  assert.deepEqual(removeStatement(1,u.id,{version:detail.version}),{ok:true});assert.equal(existsSync(path),false);assert.throws(()=>statementDetail(1,u.id),/unavailable/);assert.equal(db.prepare("SELECT count(*) n FROM statement_entries WHERE statement_id=?").get(u.id)!.n,0);assert.equal(listStatements(1).some((s:any)=>s.id===u.id),false);
+  const audit=db.prepare("SELECT details FROM audit_events WHERE action='statement.remove' AND entity_id=? ORDER BY id DESC").get(u.id) as {details:string};assert.equal(JSON.parse(audit.details).status,status);assert.equal(upload(4,text).duplicate,false);
+ }
+ for(const s of db.prepare("SELECT id FROM statements WHERE status IN('imported','reconciled')").all() as {id:number}[]){const detail=statementDetail(1,s.id);assert.throws(()=>removeStatement(1,s.id,{version:detail.version}),/unapproved/);assert.ok(downloadStatement(1,s.id).bytes.length);}
+ const blocked=upload(4,header+"2025-04-02,Storage failure,Cafe,expense,1,Food,remove-storage,\n"),detail=statementDetail(1,blocked.id),path=join(dir,(db.prepare("SELECT file_key FROM statements WHERE id=?").get(blocked.id) as {file_key:string}).file_key);
+ rmSync(path);mkdirSync(path);assert.throws(()=>removeStatement(1,blocked.id,{version:detail.version}));assert.equal(statementDetail(1,blocked.id).entries.length,1);assert.equal(db.prepare("SELECT count(*) n FROM audit_events WHERE action='statement.remove' AND entity_id=?").get(blocked.id)!.n,0);rmSync(path,{recursive:true});removeStatement(1,blocked.id,{version:detail.version});
+ assert.deepEqual(db.prepare("SELECT * FROM transactions ORDER BY id").all(),ledger);assert.deepEqual(db.prepare("SELECT * FROM account_entries ORDER BY id").all(),balances);assert.deepEqual(db.pragma("foreign_key_check"),[]);
 });
 test.after(()=>{db.close();rmSync(dir,{recursive:true,force:true});});
