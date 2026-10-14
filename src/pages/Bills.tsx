@@ -4,7 +4,7 @@ import {Link,useSearchParams} from "react-router-dom";
 import {useMutation,useQuery,useQueryClient} from "@tanstack/react-query";
 import {Tabs,TabsList,TabsTrigger,TabsContent} from "@/components/ui/tabs";
 import {Dialog,DialogDescription,DialogHeader,DialogTitle} from "@/components/ui/dialog";
-import {Button} from "@/components/ui/button";
+import {Button} from "@/components/WorkspaceButton";
 import {api,send} from "@/lib/api";
 import {formatMoney} from "@/lib/finance";
 import {decimalMoney} from "@/lib/csv";

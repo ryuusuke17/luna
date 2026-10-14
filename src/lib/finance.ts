@@ -3,9 +3,9 @@ export const MAX_MINOR = Number.MAX_SAFE_INTEGER;
 export function parseMoney(value: string): number {
   const input = value.trim();
   const match = /^(0|[1-9]\d*)(?:\.(\d{1,2}))?$/.exec(input);
-  if (!match) throw new Error("Enter a non-negative amount with up to two decimals");
+  if (!match) throw new Error("Enter zero or a positive amount in pesos, with no more than two decimal places. Do not include commas or currency symbols.");
   const minor = BigInt(match[1]) * 100n + BigInt((match[2] ?? "").padEnd(2, "0"));
-  if (minor > BigInt(MAX_MINOR)) throw new Error("Amount is too large");
+  if (minor > BigInt(MAX_MINOR)) throw new Error("This amount exceeds Luna’s supported limit. Enter a smaller amount.");
   return Number(minor);
 }
 

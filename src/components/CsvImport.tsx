@@ -1,7 +1,7 @@
 import {useEffect,useRef,useState} from "react";
 import {useQuery,useQueryClient} from "@tanstack/react-query";
 import {Link} from "react-router-dom";
-import {Button} from "@/components/ui/button";
+import {Button} from "@/components/WorkspaceButton";
 import {api,send} from "@/lib/api";
 import {formatMoney} from "@/lib/finance";
 import {CSV_TEMPLATE} from "@/lib/csv";
@@ -9,8 +9,8 @@ type Row={index:number;date:string;description:string;merchant:string;kind:strin
 type Mapping={categoryId?:number;destinationId?:number;selected?:boolean;allowDuplicate?:boolean};
 export default function CsvImport({onBusyChange}:{onBusyChange:(busy:boolean)=>void}){const client=useQueryClient(),[account,setAccount]=useState(""),[csv,setCsv]=useState(""),[filename,setFilename]=useState(""),[rows,setRows]=useState<Row[]>([]),[mappings,setMappings]=useState<Record<string,Mapping>>({}),[busy,setBusy]=useState(false),[error,setError]=useState(""),[result,setResult]=useState<{imported:number;skipped:number}|null>(null),file=useRef<HTMLInputElement>(null);const accounts=useQuery({queryKey:["accounts"],queryFn:()=>api<{id:number;name:string}[]>("accounts")}),cats=useQuery({queryKey:["categories"],queryFn:()=>api<{id:number;name:string;kind:string}[]>("categories")});
 useEffect(()=>{onBusyChange(busy);},[busy,onBusyChange]);
-async function choose(f?:File){if(!f||busy)return;setRows([]);setMappings({});setResult(null);setError("");setCsv("");setFilename(f.name);if(f.size>2_000_000){setError("CSV exceeds 2 MB");return;}setBusy(true);try{setCsv(await f.text());}catch{setError("Unable to read CSV file. Choose the file again.");}finally{setBusy(false);}}
-async function preview(){if(busy)return;setBusy(true);setError("");try{const p=await send<{rows:Row[]}>("csv-imports",{action:"preview",accountId:Number(account),csv,mappings});setRows(p.rows);}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
+async function choose(f?:File){if(!f||busy)return;setRows([]);setMappings({});setResult(null);setError("");setCsv("");setFilename(f.name);if(f.size>2_000_000){setError("This CSV file is larger than 2 MB. Choose a smaller file.");return;}setBusy(true);try{setCsv(await f.text());}catch{setError("Luna could not read this CSV file. Choose it again or save a new copy.");}finally{setBusy(false);}}
+async function preview(){if(busy)return;setBusy(true);setError("");setResult(null);setRows([]);try{const p=await send<{rows:Row[]}>("csv-imports",{action:"preview",accountId:Number(account),csv,mappings});setRows(p.rows);}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
 async function commit(){if(busy)return;setBusy(true);setError("");try{const values=Object.fromEntries(rows.map(r=>[String(r.index),{...mappings[String(r.index)],categoryId:mappings[String(r.index)]?.categoryId??r.categoryId,destinationId:mappings[String(r.index)]?.destinationId??r.destinationId,selected:mappings[String(r.index)]?.selected??r.selected,allowDuplicate:mappings[String(r.index)]?.allowDuplicate??r.allowDuplicate}]));setResult(await send("csv-imports",{action:"commit",accountId:Number(account),csv,mappings:values}));setCsv("");setRows([]);setMappings({});setFilename("");if(file.current)file.current.value="";client.invalidateQueries();}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
 function update(index:number,value:Mapping){setMappings(m=>({...m,[String(index)]:{...m[String(index)],...value}}));}
 function template(){const url=URL.createObjectURL(new Blob([CSV_TEMPLATE],{type:"text/csv"}));const link=document.createElement("a");link.href=url;link.download="luna-csv-v1.csv";link.click();URL.revokeObjectURL(url);}

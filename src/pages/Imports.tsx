@@ -4,7 +4,8 @@ import {Tabs,TabsList,TabsTrigger,TabsContent} from "@/components/ui/tabs";
 import CsvImport from "@/components/CsvImport";
 import { useRef, useState } from "react";
 import JsonTemplate from "@/components/JsonTemplate";
-import { api, send } from "@/lib/api";
+import { api, ApiError, send } from "@/lib/api";
+import { clearMessage } from "@/lib/messages";
 import { formatMoney } from "@/lib/finance";
 
 type Account = { id: number; name: string; type: string };
@@ -28,18 +29,23 @@ export default function Imports() {
   async function choose(file?: File) {
     if(busy)return;setAllowDuplicates(false);setError(""); setResult(null); setStatement(null);
     if (!file) return;
-    if (file.size > 2_000_000) { setError("JSON file exceeds 2 MB"); return; }
+    if (file.size > 2_000_000) { setError("This JSON file is larger than 2 MB. Choose a smaller statement file."); return; }
     setBusy(true);
     try {
-      const value: unknown = JSON.parse(await file.text());
+      let text: string;
+      try { text = await file.text(); }
+      catch { throw Error("Luna could not read this file. Choose it again or save a new copy."); }
+      let value: unknown;
+      try { value = JSON.parse(text); }
+      catch { throw Error("The file is not valid JSON. Correct its formatting or choose a file matching the JSON template."); }
       if (!validPreview(value)) throw Error("Invalid statement JSON v1");
       const s = value;
       await send("imports",{action:"preview",statement:s});
-      setStatement(s);
       const rules=await api<{phrase:string;category_id:number;kind:string;enabled:number;priority:number;id:number}[]>("merchant-rules");
       setCategoryMap(Object.fromEntries(s.transactions.map((r,i)=>{const hint=categories.find(c=>c.kind==="expense"&&c.name.trim().toLowerCase()===r.category_hint?.trim().toLowerCase()),rule=rules.filter(r=>r.enabled&&r.kind==="expense").sort((a,b)=>a.priority-b.priority||a.id-b.id).find(rule=>categories.some(c=>c.id===rule.category_id&&c.kind==="expense")&&(r.merchant??"").trim().toLowerCase().includes(rule.phrase.trim().toLowerCase()));return [String(i),String(hint?.id??rule?.category_id??"")];})));
       setPaymentMap({});
-    } catch (e) { setError(e instanceof Error ? e.message : "Invalid JSON file"); } finally{setBusy(false);}
+      setStatement(s);
+    } catch (e) { setError(e instanceof ApiError ? e.message : clearMessage(e instanceof Error ? e.message : undefined) ?? "Luna could not review this file. Check it against the JSON template and choose it again."); } finally{setBusy(false);}
   }
 
   async function commit() {
@@ -55,24 +61,25 @@ export default function Imports() {
   }
 
   return <>
-    <header className="mb-8"><p className="text-sm font-semibold uppercase tracking-widest text-primary">Statement review</p><h1 className="mt-2 text-3xl font-bold">Imports</h1><p className="mt-2 text-muted-foreground">Review rows before saving. Files stay in memory and are not stored.</p></header>
+    <header className="page-heading"><div><p className="eyebrow">Statement review</p><h1>Imports</h1><p className="mt-3 text-sm text-muted-foreground">Review rows before saving. Files stay in memory and are not stored.</p></div></header>
     <Tabs value={mode} onValueChange={setMode}><TabsList className="mb-5 h-auto"><TabsTrigger disabled={csvBusy} className="min-h-11" value="json">JSON statements</TabsTrigger><TabsTrigger disabled={busy} className="min-h-11" value="csv">CSV template</TabsTrigger></TabsList><TabsContent value={mode}>
     {mode==="csv"?<CsvImport onBusyChange={setCsvBusy}/>:<div>
-    <section className="grid gap-4 rounded-3xl border bg-card p-5 sm:grid-cols-2">
-      <label className="text-sm font-semibold">Credit card<select disabled={busy} value={card} onChange={e => setCard(e.target.value)} className="mt-2 h-11 w-full rounded-xl border bg-background px-3"><option value="">Select account</option>{accounts.filter(a => a.type === "credit_card").map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
+    <section className="panel grid gap-5 sm:grid-cols-2">
+      <label className="text-sm font-semibold">Credit card<select disabled={busy} value={card} onChange={e => setCard(e.target.value)} className="field"><option value="">Select account</option>{accounts.filter(a => a.type === "credit_card").map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
       <label className="text-sm font-semibold" onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();if(!busy)choose(e.dataTransfer.files[0]);}}>Choose or drop statement JSON<input ref={fileInput} disabled={busy} type="file" accept="application/json,.json" onChange={e => choose(e.target.files?.[0])} className="mt-2 block w-full text-sm" /></label>
     </section>
     {accountQuery.isPending||categoryQuery.isPending?<p role="status" className="mt-3">Loading accounts/categories…</p>:accountQuery.error||categoryQuery.error?<p role="alert" className="mt-3 text-destructive">{(accountQuery.error??categoryQuery.error)?.message}</p>:!accounts.some(a=>a.type==="credit_card")||!categories.some(c=>c.kind==="expense")?<p className="mt-3">Set up a credit card in <Link className="underline" to="/accounts">Accounts</Link> and expense categories in <Link className="underline" to="/settings">Settings</Link> first.</p>:null}
     <JsonTemplate />
+    {busy&&<p role="status" className="my-4 text-sm text-muted-foreground">{statement?"Importing your statement. Keep this page open until the result appears.":"Reading and checking your statement. No transactions have been imported yet."}</p>}
     {statement && <section className="my-5 rounded-3xl border bg-card p-5">
       <h2 className="font-bold">{statement.statement_id} · {statement.account_key}</h2>
       <p className="mt-1 text-sm text-muted-foreground">{statement.period.start} — {statement.period.end} · {statement.transactions.length} rows · closing debt {statement.closing_balance} PHP</p>
       <div className="mt-4 divide-y">{statement.transactions.map((r, i) => <article key={`${r.source_id ?? i}-${i}`} className="grid gap-3 py-4 sm:grid-cols-[1fr_auto]">
         <div><p className="font-semibold">{r.description || r.merchant || r.type}</p><p className="text-sm text-muted-foreground">{r.posted_date} · {r.type} · PHP {r.amount}{r.source_id ? ` · ${r.source_id}` : ""}</p></div>
-        {["purchase", "refund", "fee", "interest"].includes(r.type) ? <label className="text-sm">Category<select disabled={busy} value={categoryMap[String(i)] ?? ""} onChange={e => setCategoryMap(m => ({ ...m, [String(i)]: e.target.value }))} className="mt-1 h-10 w-full rounded-xl border bg-background px-3"><option value="">Choose category</option>{categories.filter(c => c.kind === "expense").map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label> : r.type === "payment" ? <label className="text-sm">Paid from<select disabled={busy} value={paymentMap[String(i)] ?? ""} onChange={e => setPaymentMap(m => ({ ...m, [String(i)]: e.target.value }))} className="mt-1 h-10 w-full rounded-xl border bg-background px-3"><option value="">Choose funding account</option>{accounts.filter(a => a.id !== Number(card) && ["cash","bank","wallet"].includes(a.type)).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label> : null}
+        {["purchase", "refund", "fee", "interest"].includes(r.type) ? <label className="text-sm">Category<select disabled={busy} value={categoryMap[String(i)] ?? ""} onChange={e => setCategoryMap(m => ({ ...m, [String(i)]: e.target.value }))} className="field"><option value="">Choose category</option>{categories.filter(c => c.kind === "expense").map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label> : r.type === "payment" ? <label className="text-sm">Paid from<select disabled={busy} value={paymentMap[String(i)] ?? ""} onChange={e => setPaymentMap(m => ({ ...m, [String(i)]: e.target.value }))} className="field"><option value="">Choose funding account</option>{accounts.filter(a => a.id !== Number(card) && ["cash","bank","wallet"].includes(a.type)).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label> : null}
       </article>)}</div>
       <label className="mt-4 flex min-h-11 items-center gap-3"><input className="size-6" type="checkbox" disabled={busy} checked={allowDuplicates} onChange={e=>setAllowDuplicates(e.target.checked)}/>I reviewed possible cross-format content duplicates; import all statement rows if warned. Exact repeated source IDs still fail.</label>
-      <div className="flex flex-wrap gap-3"><button aria-busy={busy} disabled={!card || busy || Boolean(result)||!accounts.length||statement.transactions.some((r,i)=>["purchase","refund","fee","interest"].includes(r.type)?!categoryMap[String(i)]:r.type==="payment"?!paymentMap[String(i)]:false)} onClick={commit} className="mt-4 rounded-xl bg-primary px-5 py-3 font-semibold text-primary-foreground disabled:opacity-50">{busy ? "Importing…" : result ? "Imported" : "Import all statement rows"}</button><button disabled={busy} onClick={() => { setStatement(null); setCategoryMap({}); setPaymentMap({}); if (fileInput.current) fileInput.current.value = ""; }} className="mt-4 rounded-xl border px-5 py-3">Cancel</button></div>
+      <div className="flex flex-wrap gap-3"><button aria-busy={busy} disabled={!card || busy || Boolean(result)||!accounts.length||statement.transactions.some((r,i)=>["purchase","refund","fee","interest"].includes(r.type)?!categoryMap[String(i)]:r.type==="payment"?!paymentMap[String(i)]:false)} onClick={commit} className="action mt-4">{busy ? "Importing…" : result ? "Imported" : "Import all statement rows"}</button><button disabled={busy} onClick={() => { setStatement(null); setCategoryMap({}); setPaymentMap({}); if (fileInput.current) fileInput.current.value = ""; }} className="quiet mt-4">Cancel</button></div>
     </section>}
     {error && <p role="alert" className="my-4 rounded-xl bg-destructive/10 p-3 text-destructive">{error}</p>}
     {result && <section role="status" className="rounded-3xl border bg-card p-5"><h2 className="font-bold">{result.duplicate ? "Statement already imported" : "Import complete"}</h2>{!result.duplicate && <p className="mt-2 text-sm">Reconciliation difference: {formatMoney(result.difference)} · expected {formatMoney(result.expectedClosing)} debt, recorded {formatMoney(result.actualClosing)} debt</p>}<p className="mt-1 text-xs text-muted-foreground">Differences never create automatic adjustments.</p></section>}
