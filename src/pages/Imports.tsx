@@ -1,4 +1,5 @@
-import {Link} from "react-router-dom";
+import {Link,useNavigate} from "react-router-dom";
+import StatementImportDialog from "@/components/StatementImportDialog";
 import {useQuery,useQueryClient} from "@tanstack/react-query";
 import {Tabs,TabsList,TabsTrigger,TabsContent} from "@/components/ui/tabs";
 import CsvImport from "@/components/CsvImport";
@@ -20,7 +21,7 @@ function validPreview(value: unknown): value is Statement {
 }
 
 export default function Imports() {
-  const client=useQueryClient(),[mode,setMode]=useState("json"),[allowDuplicates,setAllowDuplicates]=useState(false),[csvBusy,setCsvBusy]=useState(false);
+  const navigate=useNavigate(),client=useQueryClient(),[mode,setMode]=useState("json"),[allowDuplicates,setAllowDuplicates]=useState(false),[csvBusy,setCsvBusy]=useState(false);
   const history=useQuery({queryKey:["import-history"],queryFn:()=>api<{id:number;format:string;account_name:string;rows:number;created_at:string;reconciliation_stale:number}[]>("import-history")});
   const accountQuery=useQuery({queryKey:["accounts"],queryFn:()=>api<Account[]>("accounts")}),categoryQuery=useQuery({queryKey:["categories"],queryFn:()=>api<Category[]>("categories")});
   const accounts=accountQuery.data??[],categories=categoryQuery.data??[];
@@ -61,8 +62,8 @@ export default function Imports() {
   }
 
   return <>
-    <header className="page-heading"><div><p className="eyebrow">Statement review</p><h1>Imports</h1><p className="mt-3 text-sm text-muted-foreground">Review rows before saving. Files stay in memory and are not stored.</p></div></header>
-    <Tabs value={mode} onValueChange={setMode}><TabsList className="mb-5 h-auto"><TabsTrigger disabled={csvBusy} className="min-h-11" value="json">JSON statements · PHP</TabsTrigger><TabsTrigger disabled={busy} className="min-h-11" value="csv">CSV template · PHP</TabsTrigger></TabsList><TabsContent value={mode}>
+    <header className="page-heading"><div><p className="eyebrow">Statement review</p><h1>Imports</h1><p className="mt-3 text-sm text-muted-foreground">Full statements archive privately; legacy CSV/JSON files remain in-memory workflows.</p></div><StatementImportDialog onUploaded={(id,duplicate)=>navigate(`/statements?statement=${id}${duplicate?"&duplicate=1":""}`)}/></header>
+    <Tabs value={mode} onValueChange={setMode}><TabsList className="mb-5 h-auto"><TabsTrigger disabled={csvBusy} className="min-h-11" value="json">Legacy JSON statements · PHP</TabsTrigger><TabsTrigger disabled={busy} className="min-h-11" value="csv">Legacy flat CSV · PHP</TabsTrigger></TabsList><TabsContent value={mode}>
     {mode==="csv"?<CsvImport onBusyChange={setCsvBusy}/>:<div>
     <section className="panel grid gap-5 sm:grid-cols-2">
       <label className="text-sm font-semibold">Credit card<select disabled={busy} value={card} onChange={e => setCard(e.target.value)} className="field"><option value="">Select account</option>{accounts.filter(a => a.type === "credit_card").map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label>

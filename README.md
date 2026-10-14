@@ -17,7 +17,7 @@ Bills are independent planning records. “Record payment. No money is sent.” 
 Goals record allocations/contributions only. No account balance/net worth changes. Real allocations can exceed target; progress visuals cap at 100%.
 
 ## Imports
-Raw source files are not retained. Maximum 2 MB, 5,000 rows. Mappings apply to new previews only, never historical records. Explicit category wins, then valid case-insensitive category hint, then enabled trimmed literal merchant rules ordered by ascending priority/ID. User regex is not supported.
+Legacy CSV/JSON imports do not retain raw source files. Full-statement uploads retain private originals. Maximum 2 MB, 5,000 rows. Mappings apply to new previews only, never historical records. Explicit category wins, then valid case-insensitive category hint, then enabled trimmed literal merchant rules ordered by ascending priority/ID. User regex is not supported.
 
 ### JSON statements v1
 Existing statement contract remains: `schema_version`, `statement_id`, `account_key`, `currency: PHP`, `period`, `opening_balance`, `closing_balance`, `transactions`. Types: purchase, refund, payment, fee, interest. Amounts are decimal strings. Opening coverage must agree with the ledger; row totals must equal statement closing balance. All rows are imported atomically; exclusions cannot bypass reconciliation. Payment rows require explicit funding. Actual closing difference is reported, never silently adjusted. Templates are labeled examples, not live records.
@@ -57,7 +57,7 @@ Production requires `LUNA_STATEMENTS_PATH` on the confirmed persistent private v
 
 New API: GET/POST `/api/statements`; GET/POST `/api/statements/:id` (commit, preview, reconcile, reopen, reprocess); GET `/api/statements/:id/download`. All require authenticated ownership; mutations require CSRF. Upload body reads are bounded. Downloads are private, no-store, attachment-only. Original filenames never determine storage paths.
 
-Supported: UTF-8 PHP template CSV only, 2 MB / 5,000 rows. Existing headers and validation apply; statement CSV additionally supports type `payment` for an incoming credit-card transfer with explicit owned cash/bank/wallet funding. No arbitrary institution layouts, XLSX, PDF, OCR, pending rows, automatic external-ID links, aggregation matches or malware scanner. Source IDs are treated as review evidence, not proof. Strong/ambiguous same-account signed PHP/date/text matches require explicit linking or a separate-import reason. File retries and reviewed row commits are idempotent; immediate SQLite transactions serialize competing approvals. Overlapping identical source rows may link the same transaction only when their normalized provenance is compatible.
+Supported: UTF-8 PHP CSV only, 2 MB / 5,000 transactions. Full-layout credit-card statements use `luna-full-statement-v1`; legacy flat statements retain `luna-csv-v1`. Existing flat headers and validation apply; legacy statement CSV additionally supports type `payment` for an incoming credit-card transfer with explicit owned cash/bank/wallet funding. No arbitrary institution layouts, XLSX, PDF, OCR, pending rows, automatic external-ID links, aggregation matches or malware scanner. Source IDs are treated as review evidence, not proof. Strong/ambiguous same-account signed PHP/date/text matches require explicit linking or a separate-import reason. File retries and reviewed row commits are idempotent; immediate SQLite transactions serialize competing approvals. Overlapping identical source rows may link the same transaction only when their normalized provenance is compatible.
 
 Every staged row must be imported, explicitly linked or excluded with a reason before atomic approval. Immutable raw rows survive category/notes corrections. Reprocessing is limited to uncommitted files. Failed parser states retain the private original. Cancellation leaves staged archives; no archive deletion API. Malformed file structure fails; invalid individual rows require exclusions or corrected upload.
 
@@ -66,3 +66,37 @@ Reconciliation uses confirmed ISO posting-date periods, ledger opening balance, 
 Backups must include a consistent SQLite backup and every referenced private CSV. Quiesce uploads/approval, use SQLite backup API, copy the private directory with permissions, encrypt off-site copies. Restore both into an isolated deployment; run integrity/foreign-key checks, authenticate, download an original, compare ledger totals and reconciliation history. The migration fixture checks SQLite backup restoration only; deployment-specific joint archive restoration and malware scanning remain operator acceptance requirements. Upload exceptions remove newly written files; process crashes can leave orphan files. Inspect file keys against statements before removing orphans; never delete referenced files. Files are not encrypted by the app.
 
 Node regression checks cover private staging, ownership, unsupported formats, malformed dates, retries, overlapping source links, repeated equal purchases, atomic rollback, reconciliation mismatch/periods/locks/reopen and card payments. Playwright statement flow uses disposable API responses for mobile/keyboard review and reconciliation; it is UI contract coverage, not authenticated HTTP integration or a complete WCAG audit.
+
+### Full credit-card statement CSV
+
+Bank Statements and Imports share **Import statement**. On Bank Statements it precedes **Open transactions**. Account selection and file selection write nothing. **Upload and review** archives/stages only; explicit per-row approval creates canonical transactions. Idle Escape/Cancel restores focus; busy uploads prevent dismissal. Upload errors retain the account/file for retry. Exact repeated files reopen the existing archive without ledger writes. Legacy CSV/JSON tabs retain their original contracts.
+
+Summary rows precede the transaction header. Supported labels: Statement month/title (also Statement month or Statement title), Statement date, Due date (also Payment due date), Credit limit, Previous balance, New charges, Payments/credits (also Payments and credits), Outstanding balance, Minimum due (also Minimum amount due), Statement notes. Missing optional fields display **Not provided**; numeric/date labels with empty values must be omitted. Title/notes may be empty. Unknown nonempty fields are rejected or retained with a visible invalid-row warning, never silently dropped. Leading/trailing blank columns and blank separator rows are supported.
+
+
+default template example:
+
+```csv
+Statement month/title,September 2026
+Statement date,"Sep 21, 2026"
+Due date,"Oct 12, 2026"
+Credit limit,50000.00
+Previous balance,4028.06
+New charges,7323.10
+Payments/credits,4100.00
+Outstanding balance,7251.16
+Minimum due,500.00
+Statement notes,Historical snapshot
+
+Sale date,Post date,Description,Amount,Transaction notes
+"Aug 23, 2026","Aug 24, 2026",Example purchase,7323.10,INSTALMENT 6 OF 24
+"Sep 10, 2026","Sep 10, 2026",PAYMENT RECEIVED - THANK YOU,-4100.00,
+```
+
+Transaction headers require Sale date, Post date (also Posting date), Description, Amount (also Amount (PHP)); optional Transaction notes (also Notes). Sale date may be empty; post date must be valid, within account history, not future-dated. Due date may be future. Dates accept ISO or explicit English month names such as September 21, 2026; comma-containing dates must be CSV-quoted. Amounts accept exact PHP decimals, at most two places; quoted thousands separators and an optional PHP prefix are supported. Zero amounts, exponents, ambiguous dates and unsupported precision fail row validation.
+
+Positive amounts are purchases/expenses; negative exact PAYMENT RECEIVED - THANK YOU is an incoming payment transfer requiring explicit owned cash/bank/wallet funding. Other negatives require explicit payment/refund classification before import or linking. Refunds reduce spending; transfers never count as spending. Reviewed classification lives in statement_decisions.reviewed_kind, not mutated source JSON. Both dates, original signed amount, notes and raw summary cells remain historical provenance. Installment notes remain text only; no future installments generated.
+
+Statement credit limits are snapshots; live account limits remain unchanged. Previous/outstanding snapshots prefill official reconciliation balances; period boundaries remain explicit, not inferred from title or earliest posting. Summary identity and signed row totals must agree before reconciliation; discrepancies remain inspectable and do not prevent staging or reviewed approval. No balancing entries or silent account metadata updates. Legacy archives have nullable summary_json/raw_summary_json; repeated startup preserves old provenance and new snapshots.
+
+Regression coverage: synthetic 17-row fixture reproduces supplied totals (PHP 4,028.06 previous; 7,323.10 charges; 4,100.00 credits; 7,251.16 outstanding), not a transcription of image rows. Isolated Node checks cover parsing, exact accounting, notes, reviewed refunds, funding ownership, rollback, immutable snapshots, duplicates, mismatch blocking and migration reruns. Popup Playwright checks cover keyboard/focus, contrast, 320px/short-viewport reflow, 200%-equivalent viewport, retry, busy guard, complete summary, snapshot prefill and Imports routing. Manual touch/screen-reader/device checks remain required.

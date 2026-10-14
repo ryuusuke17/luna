@@ -57,3 +57,7 @@ CREATE INDEX IF NOT EXISTS statements_owner_idx ON statements(owner_id,account_i
 CREATE INDEX IF NOT EXISTS reconciliation_period_idx ON reconciliations(owner_id,account_id,state,period_start,period_end);
 CREATE UNIQUE INDEX IF NOT EXISTS reconciliation_active_idx ON reconciliations(statement_id) WHERE state='finalized';
 `);
+
+addColumn("statements","summary_json","TEXT");
+addColumn("statements","raw_summary_json","TEXT");
+addColumn("statement_decisions","reviewed_kind","TEXT");

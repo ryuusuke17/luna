@@ -1,13 +1,17 @@
 import {decimalAmount} from "./finance.ts";
 export const CSV_TEMPLATE = "date,description,merchant,type,amount,category,source_id,destination\r\n";
-export function parseCsv(input: string): Record<string,string>[] {
+export function tokenizeCsv(input: string, maxRows = 5001): string[][] {
  if(typeof input!=="string"||new TextEncoder().encode(input).length>2_000_000)throw Error("CSV exceeds 2 MB");
  const text=input.replace(/^\uFEFF/,""),rows:string[][]=[];let row:string[]=[],field="",quoted=false,closed=false;
  for(let i=0;i<text.length;i++){const c=text[i];if(quoted){if(c==='"'){if(text[i+1]==='"'){field+='"';i++;}else{quoted=false;closed=true;}}else field+=c;continue;}
  if(c==='"'){if(field||closed)throw Error("Malformed CSV quotes");quoted=true;}
- else if(c===','||c==='\n'||c==='\r'){row.push(field);field="";closed=false;if(c!==','){if(c==='\r'&&text[i+1]==='\n')i++;rows.push(row);row=[];if(rows.length>5001)throw Error("CSV exceeds 5,000 rows");}}
+ else if(c===','||c==='\n'||c==='\r'){row.push(field);field="";closed=false;if(c!==','){if(c==='\r'&&text[i+1]==='\n')i++;rows.push(row);row=[];if(rows.length>maxRows)throw Error("CSV exceeds 5,000 rows");}}
  else{if(closed)throw Error("Unexpected text after closing quote");field+=c;}}
- if(quoted)throw Error("Unclosed CSV quote");if(field||closed||row.length){row.push(field);rows.push(row);}if(rows.length>5001)throw Error("CSV exceeds 5,000 rows");
+ if(quoted)throw Error("Unclosed CSV quote");if(field||closed||row.length){row.push(field);rows.push(row);}if(rows.length>maxRows)throw Error("CSV exceeds 5,000 rows");
+ return rows;
+}
+export function parseCsv(input: string): Record<string,string>[] {
+ const rows=tokenizeCsv(input);
  const headers=rows.shift()?.map(h=>h.trim());if(!headers||new Set(headers).size!==headers.length||headers.some(h=>!h))throw Error("Missing or duplicate CSV headers");
  const allowed=["date","description","merchant","type","amount","category","source_id","destination"];
  if(["date","description","merchant","type","amount"].some(h=>!headers.includes(h))||headers.some(h=>!allowed.includes(h)))throw Error("Use the Luna CSV v1 template headers");
