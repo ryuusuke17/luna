@@ -65,8 +65,10 @@
  .quiet { @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-full border bg-card px-4 py-2 text-sm font-semibold hover:bg-muted; }
  .action:active,.quiet:active { filter:brightness(.9); }
  .table-scroll { @apply max-w-full overflow-x-auto rounded-lg border bg-card; }
- .records-table[aria-label="Transaction records, horizontally scrollable"] :is(th,td):first-child { @apply pl-5; }
- .records-table[aria-label="Transaction records, horizontally scrollable"] :is(th,td):last-child { @apply pr-5; }
+ .records-table[aria-label="Transaction records, horizontally scrollable"] :is(th,td) { @apply px-5 py-4 align-middle; }
+ .records-table[aria-label="Transaction records, horizontally scrollable"] th { @apply py-3; }
+ .records-table[aria-label="Transaction records, horizontally scrollable"] :is(th,td):is(:first-child,:nth-child(2),:nth-child(5),:nth-child(6),:last-child) { @apply w-px whitespace-nowrap; }
+ .records-table[aria-label="Transaction records, horizontally scrollable"] :is(th,td):nth-child(5) { @apply text-right; }
  .records-table[aria-label="Transaction records, horizontally scrollable"] td.amount > span { @apply ml-1 !inline; }
  .metric { @apply mt-2 font-medium tabular-nums; font-size:clamp(22px,2.1vw,28px); line-height:1.2; letter-spacing:-.035em; overflow-wrap:anywhere; }
  .eyebrow { @apply text-xs font-semibold uppercase tracking-[.16em] text-muted-foreground; }
