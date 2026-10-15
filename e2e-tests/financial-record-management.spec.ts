@@ -45,7 +45,11 @@ test("currency preference, fee draft, transaction correction and void",async({pa
 });
 
 test("budget edit retains ID; budget and goal deletion confirmations",async({page})=>{
- const state=await workspace(page);await page.goto("/budgets");await page.getByLabel("Selected month",{exact:true}).fill("2025-01");await recordAction(page,"Food plan budget","Edit budget");await page.getByLabel("Budget name").fill("Moved plan");await page.getByRole("dialog").getByRole("combobox",{name:"Category",exact:true}).selectOption("2");await page.getByRole("button",{name:"Save category budget"}).click();await expect(page.getByRole("dialog")).not.toBeVisible();expect(state.budgets[0].id).toBe(1);await recordAction(page,"Moved plan budget","Delete budget");await expect(page.getByRole("alertdialog").getByText(/Transactions and account balances remain unchanged/)).toBeVisible();await page.getByRole("button",{name:"Delete budget permanently"}).click();await expect(page.getByText("No expense budgets in 2025-01.")).toBeVisible();
+ const state=await workspace(page);await page.goto("/budgets");
+ await page.getByRole("button",{name:/^Selected month:/}).click();
+ await page.getByRole("dialog",{name:"Choose month"}).getByLabel("Month",{exact:true}).fill("2025-01");
+ await page.getByRole("dialog",{name:"Choose month"}).getByRole("button",{name:"Apply",exact:true}).click();
+ await recordAction(page,"Food plan budget","Edit budget");await page.getByLabel("Budget name").fill("Moved plan");await page.getByRole("dialog").getByRole("combobox",{name:"Category",exact:true}).selectOption("2");await page.getByRole("button",{name:"Save category budget"}).click();await expect(page.getByRole("dialog")).not.toBeVisible();expect(state.budgets[0].id).toBe(1);await recordAction(page,"Moved plan budget","Delete budget");await expect(page.getByRole("alertdialog").getByText(/Transactions and account balances remain unchanged/)).toBeVisible();await page.getByRole("button",{name:"Delete budget permanently"}).click();await expect(page.getByText("No expense budgets in 2025-01.")).toBeVisible();
  await page.goto("/goals");await recordAction(page,"Buffer","Delete goal");await expect(page.getByRole("alertdialog").getByText(/1 contributions totaling/)).toBeVisible();await expect(page.getByRole("alertdialog").getByText(/Account funds do not change/)).toBeVisible();await page.getByRole("button",{name:"Delete goal and allocations permanently"}).click();await expect(page.getByText("No goals yet. Create a target to begin.")).toBeVisible();expect(state.goals).toHaveLength(0);
 });
 
@@ -67,7 +71,12 @@ test("financial dialogs: accessible semantics, contrast, keyboard focus and erro
  await expect(dialog.getByLabel("Included fee · PHP")).toHaveAttribute("aria-describedby","transaction-error");await expect(dialog.getByLabel("Full amount · PHP")).toHaveValue("105");
  await reviewDialog(dialog);await page.keyboard.press("Escape");await expect(dialog).not.toBeVisible();await expect(trigger).toBeFocused();
  for(const [path,name,action] of [["/budgets","Food plan budget","Delete budget"],["/goals","Buffer","Delete goal"],["/accounts","Daily bank","Delete account"]]){
-  await page.goto(path);if(path==="/budgets")await page.getByLabel("Selected month",{exact:true}).fill("2025-01");
+  await page.goto(path);
+  if(path==="/budgets"){
+   await page.getByRole("button",{name:/^Selected month:/}).click();
+   await page.getByRole("dialog",{name:"Choose month"}).getByLabel("Month",{exact:true}).fill("2025-01");
+   await page.getByRole("dialog",{name:"Choose month"}).getByRole("button",{name:"Apply",exact:true}).click();
+  }
   await page.getByRole("button",{name:`More actions for ${name}`,exact:true}).focus();await page.keyboard.press("Space");await page.getByRole("menuitem",{name:action,exact:true}).focus();await page.keyboard.press("Enter");const confirmation=page.getByRole("alertdialog");await expect(confirmation.getByRole("button",{name:"Cancel deletion"})).toBeVisible();if(path==="/accounts")await expect(confirmation.getByLabel("Type account name to confirm")).toBeVisible();
   await reviewDialog(confirmation);await reviewFocusLoop(page,confirmation);await page.keyboard.press("Escape");await expect(confirmation).not.toBeVisible();await expect(page.locator("#main")).toBeFocused();
  }
