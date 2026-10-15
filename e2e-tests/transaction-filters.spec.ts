@@ -41,7 +41,7 @@ async function filterWorkspace(page: Page) {
       : query.get("sort") === "lowest" ? first.amount - second.amount
       : second.posted_date.localeCompare(first.posted_date));
     const pageNumber = Number(query.get("page") || 1);
-    await route.fulfill({json: {items: items.slice(pageNumber - 1, pageNumber), total: items.length, pageSize: 1}});
+    await route.fulfill({json: {items: items.slice(pageNumber - 1, pageNumber).map(record => ({...record, original_currency: "PHP", original_amount: record.amount, included_fee: 0, exchange_rate: "1"})), total: items.length, pageSize: 1}});
   });
   return {requests, workspace};
 }
@@ -405,4 +405,25 @@ test("posted-date filters, installment/category combinations and Clear all leave
   await pagination.getByRole("button", {name: "Previous", exact: true}).click();
   await expect(page.locator("tbody tr")).toHaveCount(20);
   await expect(pagination.getByRole("status")).toHaveText("41 records · page 2 of 3");
+});
+
+
+test("transaction rows combine category and description with type icons before dates (mocked API)", async ({page}) => {
+  await filterWorkspace(page);
+  await page.setViewportSize({width:1440,height:900});
+  await page.goto("/transactions?period=all&search=Cafe");
+  const table=page.getByRole("table",{name:"Posted transactions"});
+  await expect(table.getByRole("columnheader")).toHaveText(["Type","Date","Merchant","Account","Amount","Source","Details"]);
+  const row=table.getByRole("row").filter({hasText:"Cafe"});
+  await expect(row.getByRole("cell").nth(0)).toHaveText("Expense");
+  await expect(row.getByRole("cell").nth(0).locator("svg")).toBeVisible();
+  await expect(row.getByRole("cell").nth(1)).toHaveText("2026-10-01");
+  await expect(row.getByRole("cell").nth(2)).toContainText("Food ㆍ Lunch");
+  await row.getByRole("button",{name:"View Cafe on 2026-10-01"}).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.setViewportSize({width:390,height:844});
+  const item=page.getByRole("list",{name:"Posted transactions"}).getByRole("listitem");
+  await expect(item).toContainText("Food ㆍ Lunch");
+  await expect(item.locator(".record-meta").locator("svg")).toBeVisible();
 });
