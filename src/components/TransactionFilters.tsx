@@ -1,5 +1,5 @@
 import {useId, useState} from "react";
-import {CalendarDays, ChevronLeft, ChevronRight, SlidersHorizontal} from "lucide-react";
+import {CalendarDays, ChevronDown, ChevronLeft, ChevronRight, SlidersHorizontal} from "lucide-react";
 import {Button} from "@/components/WorkspaceButton";
 import DialogContent from "@/components/WorkspaceDialogContent";
 import {Dialog, DialogDescription, DialogHeader, DialogTitle, DialogTrigger} from "@/components/ui/dialog";
@@ -124,30 +124,30 @@ export default function TransactionFilters({params, accounts, categories, onChan
           setAdvancedDraft(null);
         }}>
           <div className="grid gap-4 sm:grid-cols-2">
-            <label>Account<select className="field" value={advancedDraft.get("account") || ""} onChange={event => changeAdvanced("account", event.target.value)}>
+            <label>Account<span className="relative mt-1.5 block"><select className="field mt-0 appearance-none pr-12" value={advancedDraft.get("account") || ""} onChange={event => changeAdvanced("account", event.target.value)}>
               <option value="">All accounts</option>
               {accounts.map(account => <option key={account.id} value={account.id}>{account.name}</option>)}
-            </select></label>
-            <label>Type<select className="field" value={advancedDraft.get("kind") || ""} onChange={event => changeAdvanced("kind", event.target.value)}>
+            </select><ChevronDown size={16} aria-hidden="true" className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground"/></span></label>
+            <label>Type<span className="relative mt-1.5 block"><select className="field mt-0 appearance-none pr-12" value={advancedDraft.get("kind") || ""} onChange={event => changeAdvanced("kind", event.target.value)}>
               <option value="">All types</option>
               {TRANSACTION_TYPES.map(kind => <option key={kind} value={kind}>{transactionTypeLabel(kind)}</option>)}
-            </select></label>
-            <label>Category<select className="field" value={advancedDraft.get("category") || ""} onChange={event => changeAdvanced("category", event.target.value)}>
+            </select><ChevronDown size={16} aria-hidden="true" className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground"/></span></label>
+            <label>Category<span className="relative mt-1.5 block"><select className="field mt-0 appearance-none pr-12" value={advancedDraft.get("category") || ""} onChange={event => changeAdvanced("category", event.target.value)}>
               <option value="">All categories</option>
               <option value="uncategorized">Uncategorized</option>
               {categories.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}
-            </select></label>
-            <label>Source<select className="field" value={advancedDraft.get("source") || ""} onChange={event => changeAdvanced("source", event.target.value)}>
+            </select><ChevronDown size={16} aria-hidden="true" className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground"/></span></label>
+            <label>Source<span className="relative mt-1.5 block"><select className="field mt-0 appearance-none pr-12" value={advancedDraft.get("source") || ""} onChange={event => changeAdvanced("source", event.target.value)}>
               <option value="">All sources</option>
               <option value="manual">Manual</option>
               <option value="import">Import</option>
-            </select></label>
-            <label>Sort<select className="field" value={advancedDraft.get("sort") || "newest"} onChange={event => changeAdvanced("sort", event.target.value === "newest" ? "" : event.target.value)}>
+            </select><ChevronDown size={16} aria-hidden="true" className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground"/></span></label>
+            <label>Sort<span className="relative mt-1.5 block"><select className="field mt-0 appearance-none pr-12" value={advancedDraft.get("sort") || "newest"} onChange={event => changeAdvanced("sort", event.target.value === "newest" ? "" : event.target.value)}>
               <option value="newest">Newest date</option>
               <option value="oldest">Oldest date</option>
               <option value="highest">Highest amount</option>
               <option value="lowest">Lowest amount</option>
-            </select></label>
+            </select><ChevronDown size={16} aria-hidden="true" className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground"/></span></label>
           </div>
           {(advancedDraft.get("batch") || advancedDraft.get("legacy")) && <div className="mt-4 flex flex-wrap items-center gap-2 rounded-lg border p-3 text-sm">
             <p className="min-w-0 flex-1 break-words">Upload restriction: {advancedDraft.get("legacy") ? `${advancedDraft.get("legacy")?.toUpperCase()} #${advancedDraft.get("importId")}` : `#${advancedDraft.get("batch")}`}</p>
