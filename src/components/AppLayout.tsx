@@ -4,7 +4,7 @@ import DialogContent from "@/components/WorkspaceDialogContent";
 import {useCallback,useEffect,useRef,useState} from "react";
 import {Link,NavLink,Outlet,useLocation,useNavigate,useSearchParams} from "react-router-dom";
 import {useQuery,useQueryClient} from "@tanstack/react-query";
-import {Home,WalletCards,ArrowLeftRight,ChartNoAxesCombined,PiggyBank,Settings,LogOut,Plus,Menu,Search,Target,Receipt,HelpCircle,ShieldCheck,Files,ArrowUpDown} from "lucide-react";
+import {Home,WalletCards,ArrowLeftRight,ChartNoAxesCombined,PiggyBank,Settings,LogOut,Plus,Menu,Search,Target,Receipt,HelpCircle,Files,ArrowUpDown} from "lucide-react";
 import {Sheet,SheetContent,SheetDescription,SheetHeader,SheetTitle,SheetTrigger} from "@/components/ui/sheet";
 import {Button} from "@/components/WorkspaceButton";
 import LunaLogo from "@/components/LunaLogo";
@@ -60,7 +60,6 @@ export default function AppLayout(){
     <Button variant="ghost" size="icon" className="sm:hidden" aria-label="Search workspace" onClick={()=>setMobileSearch(true)}><Search size={20} aria-hidden/></Button>
     {!mobileSearch&&searchWorkspace}
     <Dialog open={mobileSearch} onOpenChange={open=>{setMobileSearch(open);if(!open)setSearchOpen(false);}}><DialogContent onCloseAutoFocus={event=>{if(searchNavigating.current){event.preventDefault();searchNavigating.current=false;}}}><DialogHeader><DialogTitle>Search workspace</DialogTitle><DialogDescription>Find transactions, accounts, and bills.</DialogDescription></DialogHeader>{mobileSearch&&searchWorkspace}</DialogContent></Dialog>
-    <div className="ml-auto hidden items-center gap-2 whitespace-nowrap text-xs text-muted-foreground xl:flex"><ShieldCheck size={16} aria-hidden/>Private by design</div>
     {(contextual||hasDefaultAction)&&<Button onClick={openHeaderAction} disabled={contextual?.disabled} className="ml-auto min-w-0 shrink gap-2 whitespace-normal px-3 text-left sm:px-4"><Plus size={18} className="shrink-0" aria-hidden/>{headerActionLabel}</Button>}
    </header>
    <main id="main" tabIndex={-1} className="mx-auto workspace-main max-w-[1440px] p-4 sm:p-6"><Outlet context={{openTransaction:()=>setEntry(true),registerAction}}/></main>
