@@ -8,7 +8,7 @@ export type TransactionDateFilter = {
 };
 
 export function currentMonth(now = new Date()): string {
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  return `${String(now.getFullYear()).padStart(4, "0")}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 
 export function normalizeTransactionFilters(input: URLSearchParams, now = new Date()): URLSearchParams {

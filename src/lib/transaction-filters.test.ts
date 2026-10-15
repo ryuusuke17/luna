@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import {isCalendarDate} from "./finance.ts";
 import {adjacentTransactionMonth, applyTransactionDate, applyTransactionFilters, currentMonth, normalizeTransactionFilters, transactionDateFilter, transactionDateLabel, transactionFilterCount} from "./transaction-filters.ts";
 
 const params = (value = "") => new URLSearchParams(value);
@@ -12,6 +13,12 @@ test("month navigation crosses years and never replaces ranges, All time, or inv
     for (const direction of [-1, 1] as const) assert.equal(adjacentTransactionMonth(params(query), direction), null);
   }
   assert.equal(adjacentTransactionMonth(params("month=9999-12"), 1), null);
+  assert.equal(adjacentTransactionMonth(params("month=0100-01"), -1), null);
+  assert.equal(adjacentTransactionMonth(params("month=0100-01"), 1), "0100-02");
+  assert.equal(adjacentTransactionMonth(params("month=0100-02"), -1), "0100-01");
+  assert.equal(adjacentTransactionMonth(params("month=0999-12"), 1), "1000-01");
+  assert.equal(adjacentTransactionMonth(params("month=1000-01"), -1), "0999-12");
+  assert.equal(adjacentTransactionMonth(params("month=9999-11"), 1), "9999-12");
   const original = params("month=2026-11&account=4&batch=6&search=shop&page=2");
   const next = applyTransactionDate(original, {mode: "month", month: adjacentTransactionMonth(original, -1)!, start: "", end: ""});
   assert.equal(next.get("month"), "2026-10");
@@ -21,10 +28,23 @@ test("month navigation crosses years and never replaces ranges, All time, or inv
 });
 
 test("fresh views use local calendar months, including year boundaries", () => {
-  for (const [date, month] of [[new Date(2026, 0, 1), "2026-01"], [new Date(2026, 11, 31), "2026-12"], [new Date(2027, 0, 1), "2027-01"]] as const) {
+  for (const [date, month] of [[new Date(2026, 0, 1), "2026-01"], [new Date(2026, 11, 31), "2026-12"], [new Date(2027, 0, 1), "2027-01"], [new Date("0100-01-01T00:00:00"), "0100-01"]] as const) {
     assert.equal(currentMonth(date), month);
     assert.equal(normalizeTransactionFilters(params(), date).get("month"), month);
   }
+});
+
+test("month-only adapters validate boundaries without changing detail URL IDs", () => {
+  const month = params("month=2026-01&id=42");
+  for (const value of ["", "bad", "2026-00", "2026-13", "2026-1", "0099-12", "10000-01"]) {
+    assert.equal(isCalendarDate(`${value}-01`), false);
+  }
+  for (const value of ["0100-01", "0999-12", "2024-02", "9999-12"]) {
+    assert.equal(isCalendarDate(`${value}-01`), true);
+  }
+  assert.equal(adjacentTransactionMonth(month, -1), "2025-12");
+  assert.equal(transactionDateLabel(month), "January 2026");
+  assert.equal(month.toString(), "month=2026-01&id=42");
 });
 
 test("contextual and All time URLs never acquire a default month", () => {

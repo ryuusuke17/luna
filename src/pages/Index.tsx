@@ -2,6 +2,7 @@ import {useState} from "react";
 import {Link} from "react-router-dom";
 import {useQuery} from "@tanstack/react-query";
 import {Area,AreaChart,Bar,BarChart,CartesianGrid,ResponsiveContainer,Tooltip,XAxis,YAxis} from "recharts";
+import {currentMonth} from "@/lib/transaction-filters";
 import {ArrowDownLeft,ArrowUpRight,ArrowRight,Wallet,Receipt,PiggyBank,Landmark,CreditCard,Banknote,HandCoins,CircleDollarSign,ChevronDown} from "lucide-react";
 import {Button} from "@/components/WorkspaceButton";
 import MonthControl from "@/components/MonthControl";
@@ -23,7 +24,7 @@ function accountIcon(type:string){
 }
 
 export default function Index(){
- const [month,setMonth]=useState(new Date().toISOString().slice(0,7)),[breakdown,setBreakdown]=useState("category"),[day,setDay]=useState<string|null>(null);
+ const [month,setMonth]=useState(currentMonth),[breakdown,setBreakdown]=useState("category"),[day,setDay]=useState<string|null>(null);
  const report=useQuery({queryKey:["reports",month],queryFn:()=>api<Report>(`reports?month=${month}`)}),transactions=useQuery({queryKey:["transactions","dashboard",month],queryFn:()=>api<{id:number;posted_date:string;description:string;merchant?:string;is_installment?:number|null;kind:string;amount:number;account_name:string}[]>(`transactions?month=${month}`)}),budgets=useQuery({queryKey:["budgets"],queryFn:()=>api<{month:string;kind:string;amount:number;actual:number}[]>("budgets")}),bills=useQuery({queryKey:["bills"],queryFn:()=>api<Bill[]>("bills")}),accounts=useQuery({queryKey:["accounts"],queryFn:()=>api<{id:number;name:string;balance:number;type:string}[]>("accounts")}),prefs=useQuery({queryKey:["preferences"],queryFn:()=>api<{bill_alerts:number;budget_alerts:number;goal_alerts:number}>("preferences")}),goals=useQuery({queryKey:["goals"],queryFn:()=>api<{id:number;name:string;allocated:number;target:number}[]>("goals")});
  const r=report.data,expenseBudgets=budgets.data?.filter(b=>b.month===month&&b.kind==="expense"),commitments=bills.data?.filter(b=>b.due_date.startsWith(month)&&!b.transaction_id),days=new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),0).getDate(),offset=new Date(`${month}-01T12:00:00`).getDay(),breakdownRows=breakdown==="category"?r?.categories:r?.merchants;
  const alerts=[...(prefs.data?.bill_alerts?bills.data?.filter(b=>!b.transaction_id&&b.due_date<new Date().toISOString().slice(0,10)).map(b=>({label:`Overdue: ${b.name}`,to:`/bills?id=${b.id}`}))??[]:[]),...(prefs.data?.budget_alerts&&expenseBudgets?.some(b=>b.actual>b.amount)?[{label:"An expense budget is over its limit",to:"/budgets"}]:[]),...(prefs.data?.goal_alerts?goals.data?.filter(g=>g.allocated>=g.target).map(g=>({label:`Achieved: ${g.name}`,to:"/goals"}))??[]:[])];
