@@ -43,7 +43,7 @@ export default function AppLayout(){
   </div>)}
   <div className="mt-auto grid gap-4 border-t border-sidebar-border pt-5">
    <button onClick={()=>{setDrawer(false);setEntry(true);}} className="inline-flex min-h-11 items-center gap-2 rounded-full px-3 text-sm text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground"><Plus size={18} aria-hidden/>Add transaction</button>
-   <Link to="/settings" className="flex min-h-12 items-center gap-3 rounded-md px-2 py-2 hover:bg-sidebar-accent"><span className="grid size-10 shrink-0 place-items-center rounded-full bg-sidebar-accent text-sm font-semibold">{profile.data?.user.username?.slice(0,1).toUpperCase()??"L"}</span><span className="min-w-0"><strong className="block truncate text-sm">{profile.data?.user.username??"Workspace"}</strong><span className="text-xs text-white/60">PHP reporting · Private workspace</span></span></Link>
+   <Link to="/settings" className="flex min-h-12 items-center gap-3 rounded-md px-2 py-2 hover:bg-sidebar-accent"><span className="grid size-10 shrink-0 place-items-center rounded-full bg-sidebar-accent text-sm font-semibold">{profile.data?.user.username?.slice(0,1).toUpperCase()??"L"}</span><span className="min-w-0"><strong className="block truncate text-sm">{profile.data?.user.username??"Workspace"}</strong><span className="text-xs text-white/60">{profile.data?.user ? "Admin" : "User"}</span></span></Link>
    <button onClick={logout} disabled={signingOut} aria-busy={signingOut} className="flex min-h-11 items-center gap-3 rounded-full px-4 text-sm text-white/70 hover:bg-sidebar-accent hover:text-white"><LogOut size={18} aria-hidden/>{signingOut?"Signing out…":"Sign out"}</button>
    {error&&<p role="alert" className="text-sm">{error}</p>}
   </div>
