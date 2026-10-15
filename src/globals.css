@@ -57,7 +57,7 @@
  ::selection { background:#494fdf; color:#fff; }
 }
 @layer components {
- .panel { @apply min-w-0 rounded-lg border bg-card p-4 text-card-foreground; }
+ .panel { @apply min-w-0 rounded-lg border bg-card p-5 sm:p-6 text-card-foreground; }
  .page-heading { @apply mb-5 flex flex-wrap items-center justify-between gap-3; }
  .page-heading h1 { margin-top:0; }
  .field { @apply mt-1.5 min-h-10 w-full rounded-md border border-input bg-card px-3 py-2; font-size:16px; font-weight:400; }
