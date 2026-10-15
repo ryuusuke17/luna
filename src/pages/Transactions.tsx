@@ -16,8 +16,9 @@ import {ArrowDownLeft,ArrowUpRight,ArrowLeftRight,CalendarClock,Wallet,SlidersHo
 type Tx=TransactionRecord&{source?:string;imports?:{id:number;account_id:number;filename:string;raw:Record<string,string>}[];bill_linked:boolean;balance_impacts:{id:number;name:string;change:number}[];id:number;posted_date:string;kind:string;description:string;merchant:string;notes:string;amount:number;account_name:string;category_name:string;counter_account_name:string};
 function TransactionTypeIcon({type}:{type:string}){
  const Icon=({income:ArrowDownLeft,expense:ArrowUpRight,installment:CalendarClock,transfer:ArrowLeftRight,refund:Undo2,opening:Wallet,adjustment:SlidersHorizontal}[type]??SlidersHorizontal);
+ const color=({income:"text-[hsl(var(--success))]",expense:"text-destructive",installment:"text-[hsl(var(--warning))]",transfer:"text-[hsl(var(--chart-4))]",refund:"text-[hsl(var(--chart-2))]",opening:"text-[hsl(var(--chart-1))]",adjustment:"text-muted-foreground"}[type]??"text-muted-foreground");
  const label=transactionTypeLabel(type);
- return <span className="inline-flex items-center text-muted-foreground" title={label}><Icon size={18} aria-hidden/><span className="sr-only">{label}</span></span>;
+ return <span className={`inline-flex items-center ${color}`} title={label}><Icon size={18} aria-hidden/><span className="sr-only">{label}</span></span>;
 }
 export default function Transactions(){
  const client=useQueryClient(),[editing,setEditing]=useState<Tx|null>(null),[deleting,setDeleting]=useState<Tx|null>(null),[error,setError]=useState(""),[status,setStatus]=useState(""),[selected,setSelected]=useState<Tx|null>(null);
