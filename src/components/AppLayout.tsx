@@ -38,7 +38,6 @@ export default function AppLayout(){
  const navigation=<div data-dark className="flex min-h-full flex-col bg-sidebar px-4 pb-4 pt-5 text-sidebar-foreground">
   <Link to="/" aria-label="Luna home" className="mx-auto mb-5 inline-flex min-h-12 w-fit items-center rounded-md"><LunaLogo className="w-24"/></Link>
   {[["Workspace",workspace],["Manage",manage]].map(([label,links])=><div key={String(label)} className="mb-5">
-   <p className="mb-3 px-4 text-xs font-semibold uppercase tracking-[.16em] text-white/60">{String(label)}</p>
    <nav aria-label={String(label)} className="grid gap-1">{(links as typeof workspace|typeof manage).map(([to,name,Icon])=><NavLink to={to} key={to} end={to==="/"} onClick={()=>setDrawer(false)} className={({isActive})=>`flex min-h-10 items-center gap-2 rounded-full px-3 py-2 text-sm ${isActive?"bg-sidebar-primary font-semibold text-sidebar-primary-foreground":"text-white/75 hover:bg-sidebar-accent hover:text-white"}`}><Icon size={19} strokeWidth={1.7} aria-hidden/>{name}</NavLink>)}</nav>
   </div>)}
   <div className="mt-auto grid gap-4 border-t border-sidebar-border pt-5">
