@@ -49,7 +49,7 @@ type Card={id:number;name:string;last4:string|null;issuer:string|null;credit_lim
 type StatementRecord={id:number;owner_id:number;card_id:number;currency:string;filename:string;file_hash:string;parser_version:string;metadata_json:string;raw_metadata_json:string;reconciliation_json:string;warnings_json:string;statement_date:string;due_date:string;original_balance:number;minimum_due:number;review_note:string;supersedes_id:number|null;superseded_by:number|null;tracking_confirmed:number;created_at:string;card_name:string;last4:string|null;issuer:string|null;applied:number};
 const columns="s.id,s.owner_id,s.card_id,s.currency,s.filename,s.file_hash,s.parser_version,s.metadata_json,s.raw_metadata_json,s.reconciliation_json,s.warnings_json,s.statement_date,s.due_date,s.original_balance,s.minimum_due,s.review_note,s.supersedes_id,s.superseded_by,s.tracking_confirmed,s.created_at,a.name card_name,a.last4,a.issuer,COALESCE((SELECT SUM(x.amount) FROM cc_allocations x WHERE x.statement_id=s.id),0) applied";
 function audit(owner:number,action:string,entity:number,details:unknown){db.prepare("INSERT INTO audit_events(owner_id,action,entity_id,details) VALUES(?,?,?,?)").run(owner,`credit-card.${action}`,entity,JSON.stringify(details));}
-export function creditCards(owner:number){return db.prepare("SELECT id,name,last4,issuer,credit_limit FROM accounts WHERE owner_id=? AND type='credit_card' AND archived_at IS NULL ORDER BY name").all(owner) as Card[];}
+export function creditCards(owner:number){return db.prepare("SELECT a.id,a.name,a.last4,COALESCE(NULLIF(a.issuer,''),(SELECT json_extract(s.metadata_json,'$.issuer') FROM cc_statements s WHERE s.card_id=a.id AND s.owner_id=a.owner_id AND s.superseded_by IS NULL ORDER BY s.statement_date DESC,s.id DESC LIMIT 1)) issuer,a.credit_limit FROM accounts a WHERE a.owner_id=? AND a.type='credit_card' AND a.archived_at IS NULL ORDER BY a.name,a.id").all(owner) as Card[];}
 function card(owner:number,cardId:number){const found=creditCards(owner).find(c=>c.id===cardId);if(!found)throw Error("Select an owned, active credit card account");return found;}
 function statement(owner:number,statementId:number){
  const found=db.prepare(`SELECT ${columns} FROM cc_statements s JOIN accounts a ON a.id=s.card_id AND a.owner_id=s.owner_id WHERE s.owner_id=? AND s.id=?`).get(owner,statementId) as StatementRecord|undefined;
@@ -91,18 +91,25 @@ export function importCreditCardStatement(owner:number,input:unknown){
   return{duplicate:false,existingId:newId};
  }).immediate();
 }
-const filters=z.object({year:z.string().regex(/^\d{4}$/).optional(),month:z.string().regex(/^\d{4}-(?:0[1-9]|1[0-2])$/).optional(),issuer:z.string().max(240).optional(),cards:z.string().regex(/^\d+(?:,\d+)*$/).max(500).optional(),status:z.enum(["not_tracked","unpaid","partial","paid","past_due_unverified","credit_balance"]).optional(),search:z.string().max(200).optional(),page:z.string().regex(/^[1-9]\d{0,5}$/).optional(),sort:z.enum(["newest","oldest","balance"]).optional()}).strict();
-export function listCreditCardStatements(owner:number,input:unknown={}){
+const filters=z.object({year:z.string().regex(/^\d{4}$/).optional(),month:z.string().regex(/^\d{4}-(?:0[1-9]|1[0-2])$/).optional(),issuer:z.string().max(240).optional(),cards:z.string().regex(/^\d+(?:,\d+)*$/).max(500).optional(),status:z.enum(["not_tracked","unpaid","partial","paid","past_due_unverified","credit_balance"]).optional(),search:z.string().max(200).optional(),dueStart:date.optional(),dueEnd:date.optional(),page:z.string().regex(/^[1-9]\d{0,5}$/).optional(),sort:z.enum(["newest","oldest","balance"]).optional()}).strict();
+export function creditCardStatementScope(owner:number,input:unknown={}){
  const f=filters.parse(input),where=["s.owner_id=?","s.superseded_by IS NULL"],args:(number|string)[]=[owner];
+ if(f.dueStart&&f.dueEnd&&f.dueStart>f.dueEnd)throw Error("Due date start must precede end");
+ if(f.dueStart){where.push("s.due_date>=?");args.push(f.dueStart);}
+ if(f.dueEnd){where.push("s.due_date<=?");args.push(f.dueEnd);}
  if(f.year){where.push("substr(s.statement_date,1,4)=?");args.push(f.year);}
  if(f.month){where.push("substr(s.statement_date,1,7)=?");args.push(f.month);}
- if(f.issuer){where.push("COALESCE(a.issuer,json_extract(s.metadata_json,'$.issuer'))=?");args.push(f.issuer);}
+ if(f.issuer){where.push("COALESCE(NULLIF(a.issuer,''),json_extract(s.metadata_json,'$.issuer'))=?");args.push(f.issuer);}
  if(f.cards){const ids=f.cards.split(",").map(Number);if(!ids.every(Number.isSafeInteger))throw Error("Invalid card filter");where.push(`s.card_id IN (${ids.map(()=>"?").join(",")})`);args.push(...ids);}
  if(f.search){where.push("(a.name LIKE ? OR s.filename LIKE ? OR json_extract(s.metadata_json,'$.title') LIKE ?)");args.push(...Array(3).fill(`%${f.search}%`));}
  const statusExpression="CASE WHEN s.original_balance<0 THEN 'credit_balance' WHEN s.original_balance=0 OR applied>=s.original_balance THEN 'paid' WHEN s.due_date<date('now') THEN 'past_due_unverified' WHEN s.tracking_confirmed=0 AND applied=0 THEN 'not_tracked' WHEN applied>0 THEN 'partial' ELSE 'unpaid' END";
  const base=`SELECT ${columns} FROM cc_statements s JOIN accounts a ON a.id=s.card_id AND a.owner_id=s.owner_id WHERE ${where.join(" AND ")}`;
  const scoped=`SELECT *,${statusExpression} tracker_status FROM (${base}) s`;
  const final=`SELECT * FROM (${scoped}) WHERE ${f.status?"tracker_status=?":"1=1"}`,finalArgs=[...args,...(f.status?[f.status]:[])];
+ return{f,final,finalArgs};
+}
+export function listCreditCardStatements(owner:number,input:unknown={}){
+ const {f,final,finalArgs}=creditCardStatementScope(owner,input);
  // Aggregation excludes source blobs and line JSON; summary never reads the general ledger.
  const metrics=db.prepare(`SELECT currency,COUNT(*) statements,COUNT(DISTINCT card_id) cards,SUM(original_balance) originalBalance,SUM(minimum_due) minimumDue,SUM(applied) applied,SUM(MAX(0,original_balance-applied)) remaining,SUM(json_extract(metadata_json,'$.newCharges')) newCharges FROM (${final}) GROUP BY currency`).safeIntegers(true).all(...finalArgs).map(row=>Object.fromEntries(Object.entries(row as Record<string,string|bigint>).map(([key,value])=>{
   if(typeof value!=="bigint")return[key,value];const number=Number(value);if(!Number.isSafeInteger(number))throw Error("Filtered statement totals exceed supported range; narrow filters");return[key,number];
@@ -114,9 +121,10 @@ export function listCreditCardStatements(owner:number,input:unknown={}){
  const cards=allCards.filter(c=>(!f.issuer||c.issuer===f.issuer)&&(!selectedIds||selectedIds.includes(c.id))).map(c=>{
   const latest=db.prepare(`SELECT ${columns} FROM cc_statements s JOIN accounts a ON a.id=s.card_id WHERE s.owner_id=? AND s.card_id=? AND s.superseded_by IS NULL ORDER BY s.statement_date DESC,s.id DESC LIMIT 1`).get(owner,c.id) as StatementRecord|undefined;
   const selected=f.month?db.prepare("SELECT id FROM cc_statements WHERE owner_id=? AND card_id=? AND substr(statement_date,1,7)=? AND superseded_by IS NULL ORDER BY statement_date DESC,id DESC").all(owner,c.id,f.month) as {id:number}[]:[];
-  return{...c,latest:latest?present(latest):null,selectedMonthCount:f.month?selected.length:null,selectedMonth:selected.length?present(statement(owner,selected[0].id)):null};
+  const selectedIssues=selected.map(s=>present(statement(owner,s.id)));
+  return{...c,latest:latest?present(latest):null,selectedMonthCount:f.month?selected.length:null,selectedMonth:selectedIssues[0]??null,selectedIssues};
  });
- return{items:rows.map(present),total,page,pageSize,metrics,cards,allCards,issuers:[...new Set(allCards.map(c=>c.issuer).filter(Boolean))]};
+ return{items:rows.map(present),total,page,pageSize,metrics,cards,allCards,issuers:[...new Set(allCards.map(c=>c.issuer).filter((issuer):issuer is string=>Boolean(issuer)))]};
 }
 const lineFilters=z.object({page:z.string().regex(/^[1-9]\d{0,5}$/).optional(),search:z.string().max(200).optional(),type:z.string().max(100).optional(),category:z.string().max(100).optional(),sign:z.enum(["debit","credit"]).optional(),start:date.optional(),end:date.optional(),sort:z.enum(["source","sale","post","amount","merchant"]).optional()}).strict();
 export function creditCardStatementDetail(owner:number,statementId:number,input:unknown={}){

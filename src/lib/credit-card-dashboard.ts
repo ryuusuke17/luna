@@ -1,0 +1,6 @@
+import type {CreditCardPreview} from "./credit-card-csv";
+import type {StatementDashboard} from "./credit-card-statements";
+import {isCalendarDate} from "./finance";
+export type ActivityLine={id:number;statement_id:number;row_index:number;amount:number;currency:string;card_id:number;card_name:string;last4:string|null;issuer:string;statement_month:string;source:CreditCardPreview["lines"][number];type_override:string|null;category_override:string|null;notes_override:string|null;display_type:string;display_category:string;payment_id:number|null;funding_source:string|null};
+export type CreditDashboard=StatementDashboard&{selectedMonth:string|null;availableMonths:string[];activity:{items:ActivityLine[];total:number;page:number;pageSize:number;categories:string[]};diagnostics:{issued:{total:number;active:number|null};lines:number;legacyArchives:number;ledgerImports:number;issues:{id:number;card_id:number;statement_date:string;currency:string;superseded_by:number|null;line_count:number}[];ambiguousCards:number[]}};
+export function statementMonthLabel(month:string){return isCalendarDate(`${month}-01`)?new Intl.DateTimeFormat("en",{month:"long",year:"numeric",timeZone:"UTC"}).format(new Date(`${month}-01T12:00:00Z`)):"Invalid statement month";}
