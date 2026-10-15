@@ -129,6 +129,8 @@
  .dialog-actions > * { margin:0!important; max-width:100%; }
  .dialog-actions .optional-action { margin-right:auto!important; }
  .dialog-actions button { white-space:normal; }
+ .transaction-details-dialog .dialog-actions { position:sticky; bottom:-20px; }
+ .transaction-details-dialog .dialog-actions > :first-child { margin-right:auto!important; }
  .workspace-dialog > button:last-child { top:8px; right:8px; }
  .workspace-dialog [role=heading] { padding-right:24px; }
  .mobile-search-results { position:static!important; max-height:50dvh!important; }
@@ -148,5 +150,7 @@
  .dialog-scroll { padding:16px; max-height:calc(100dvh - 26px); }
  .workspace-dialog { max-width:calc(100vw - 24px); max-height:calc(100dvh - 24px)!important; }
  .dialog-actions { margin:16px -16px -16px; padding:12px 16px; }
+ .transaction-details-dialog .dialog-actions { bottom:-16px; }
+ .transaction-details-dialog .dialog-actions > button { flex:1 1 100%; }
  .record-amount { max-width:48%; overflow-wrap:anywhere; }
 }
