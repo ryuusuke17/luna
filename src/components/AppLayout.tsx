@@ -19,9 +19,9 @@ export default function AppLayout(){
  const results=useQuery({queryKey:["search",term],queryFn:()=>api<Result[]>(`search?q=${encodeURIComponent(term)}`),enabled:Boolean(term)});
  const registerAction=useCallback((action:PageAction|null)=>setPageAction(action?{...action,path:location.pathname}:null),[location.pathname]);
  const contextual=pageAction?.path===location.pathname?pageAction:null;
- const hasDefaultAction=["/","/transactions","/statements"].includes(location.pathname.replace(/\/$/,"")||"/");
- const statementPage=location.pathname.replace(/\/$/,"")==="/statements",headerActionLabel=contextual?.label??(statementPage?"Add statement":"Add transaction");
- function openHeaderAction(){if(contextual){contextual.onClick();return;}if(statementPage){const next=new URLSearchParams(params);next.set("upload","1");setParams(next);}else setEntry(true);}
+ const hasDefaultAction=["/","/transactions"].includes(location.pathname.replace(/\/$/,"")||"/");
+ const headerActionLabel=contextual?.label??"Add transaction";
+ function openHeaderAction(){if(contextual){contextual.onClick();return;}setEntry(true);}
  useEffect(()=>{const timer=setTimeout(()=>{setTerm(query.trim());setActive(-1);},200);return()=>clearTimeout(timer);},[query]);
  useEffect(()=>{if(params.get("new")==="1")setEntry(true);},[params]);
  useEffect(()=>{setDrawer(false);setSearchOpen(false);setMobileSearch(false);},[location.pathname]);
