@@ -1,0 +1,21 @@
+Issuer,UnionBank
+Statement month/title,July 2023
+Statement date,"Jul 9, 2023"
+Due date,"Jul 26, 2023"
+Credit limit,25000.00
+Previous balance,2968.69
+New charges,4707.04
+Payments/credits,2968.69
+Outstanding balance,4608.04
+Minimum due,500.00
+Statement notes,"Payments/Credits (source column 5): P3,067.69"
+
+Sale date,Post date,Merchant,Amount,Category,Transaction notes
+"Jun 10, 2023","Jun 13, 2023",CITIMART ISLAND MALL MINDORO ORIENPH,1291.84,,
+"Jun 11, 2023","Jun 13, 2023",LAZADA PH MAKATI PH,1100.00,,
+"Jun 14, 2023","Jun 16, 2023",LAZADA PH MAKATI PH,1100.00,,
+"Jun 15, 2023","Jun 16, 2023",FOOD PANDA MAKATI PH,360.00,,
+"Jun 19, 2023","Jun 20, 2023",CASH PAYMENT - THANK YOU PH,-2968.69,,
+"Jun 21, 2023","Jun 23, 2023",LAZADA PH MAKATI PH,99.00,,
+"Jun 23, 2023","Jun 26, 2023",LAZADA PH MAKATI PH,-99.00,,
+"Jul 7, 2023","Jul 7, 2023",ABENSON VENTURES INC 2 (002:024) PH,756.20,,

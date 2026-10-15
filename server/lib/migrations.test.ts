@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import Database from "better-sqlite3";
-import {mkdtempSync,rmSync} from "node:fs";
+import {mkdtempSync,rmSync,mkdirSync,writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 const directory=mkdtempSync(join(tmpdir(),"luna-migration-")),path=join(directory,"fixture.sqlite"),backup=join(directory,"backup.sqlite");
@@ -11,6 +11,7 @@ original.exec("CREATE TABLE statements(id INTEGER PRIMARY KEY,owner_id INTEGER N
 await original.backup(backup);original.close();
 const restored=new Database(backup);assert.equal(restored.pragma("integrity_check",{simple:true}),"ok");assert.equal(restored.prepare("SELECT delta FROM account_entries").get()?.delta,12345);restored.close();
 process.env.LUNA_DB_PATH=path;
+process.env.LUNA_STATEMENTS_PATH=join(directory,"originals");mkdirSync(process.env.LUNA_STATEMENTS_PATH);writeFileSync(join(process.env.LUNA_STATEMENTS_PATH,"old-private-key"),"fixture");
 const {db}=await import("./db.ts");
 test("additive migration preserves existing ledger; verified backup stays unchanged",()=>{assert.equal(db.pragma("integrity_check",{simple:true}),"ok");assert.equal(db.prepare("SELECT description,amount FROM transactions WHERE id=1").get()?.amount,12345);assert.equal(db.prepare("SELECT name FROM accounts WHERE id=1").get()?.name,"Existing");assert.equal(db.prepare("SELECT delta FROM account_entries").get()?.delta,12345);assert.ok((db.pragma("table_info(transactions)") as {name:string}[]).some(c=>c.name==="merchant"));assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE name='bills'").get());const snapshot=new Database(backup);assert.ok(!(snapshot.pragma("table_info(transactions)") as {name:string}[]).some(c=>c.name==="merchant"));snapshot.close();});
 test("legacy snapshots migrate as PHP without changing amounts",()=>{const row=db.prepare("SELECT amount,original_currency,original_amount,exchange_rate,included_fee FROM transactions WHERE id=1").get();assert.deepEqual(row,{amount:12345,original_currency:"PHP",original_amount:12345,exchange_rate:"1",included_fee:0});assert.equal(db.pragma("foreign_key_check").length,0);});

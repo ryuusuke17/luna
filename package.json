@@ -84,7 +84,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "start": "node .output/server/index.mjs",
-    "test": "node --experimental-strip-types --test server/lib/ledger.test.ts server/lib/imports.test.ts server/lib/planning.test.ts server/lib/csv-imports.test.ts server/lib/migrations.test.ts src/lib/messages.test.ts src/lib/finance.test.ts server/lib/record-management.test.ts server/lib/statements.test.ts server/lib/workspace-architecture.test.ts"
+    "test": "node --experimental-strip-types --test server/lib/ledger.test.ts server/lib/imports.test.ts server/lib/planning.test.ts server/lib/csv-imports.test.ts server/lib/migrations.test.ts src/lib/messages.test.ts src/lib/finance.test.ts src/lib/transaction-filters.test.ts server/lib/record-management.test.ts server/lib/statements.test.ts server/lib/workspace-architecture.test.ts server/lib/transaction-first.test.ts server/lib/statement-archives.test.ts"
   },
   "type": "module",
   "version": "0.0.0"

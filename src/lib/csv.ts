@@ -1,4 +1,5 @@
 import {decimalAmount} from "./finance.ts";
+import {transactionType} from "./transactions.ts";
 export const CSV_TEMPLATE = "date,description,merchant,type,amount,category,source_id,destination\r\n";
 export function tokenizeCsv(input: string, maxRows = 5001): string[][] {
  if(typeof input!=="string"||new TextEncoder().encode(input).length>2_000_000)throw Error("CSV exceeds 2 MB");
@@ -19,6 +20,6 @@ export function parseCsv(input: string): Record<string,string>[] {
 }
 export function decimalMoney(minor: number): string { if(!Number.isSafeInteger(minor))throw Error("Invalid amount");const sign=minor<0?"-":"",n=BigInt(Math.abs(minor));return `${sign}${n/100n}.${String(n%100n).padStart(2,"0")}`; }
 export function csvCell(value: string, text = true): string { const safe=text&&/^[\s]*[=+\-@\t\r]/.test(value)?`'${value}`:value;return `"${safe.replace(/"/g,'""')}"`; }
-export function exportCsv(rows: {posted_date:string;description:string;merchant?:string;kind:string;amount:number;account_name?:string;category_name?:string;counter_account_name?:string;original_currency?:string;original_amount?:number;exchange_rate?:string;included_fee?:number}[]):string {
- return ["date,description,merchant,type,amount_php,account,category,destination,original_currency,original_total,exchange_rate_php,included_fee,original_subtotal",...rows.map(r=>{const currency=r.original_currency??"PHP",total=r.original_amount??r.amount,fee=r.included_fee??0;return [csvCell(r.posted_date),csvCell(r.description),csvCell(r.merchant??""),csvCell(r.kind),csvCell(decimalMoney(r.amount),false),csvCell(r.account_name??""),csvCell(r.category_name??""),csvCell(r.counter_account_name??""),csvCell(currency),csvCell(decimalAmount(total,currency),false),csvCell(r.exchange_rate??"1",false),csvCell(decimalAmount(fee,currency),false),csvCell(decimalAmount(total-fee,currency),false)].join(",");})].join("\r\n");
+export function exportCsv(rows: {posted_date:string;description:string;merchant?:string;kind:string;amount:number;account_name?:string;category_name?:string;counter_account_name?:string;original_currency?:string;original_amount?:number;exchange_rate?:string;included_fee?:number;is_installment?:number|null;notes?:string}[]):string {
+ return ["date,description,merchant,type,amount_php,account,category,destination,original_currency,original_total,exchange_rate_php,included_fee,original_subtotal",...rows.map(r=>{const currency=r.original_currency??"PHP",total=r.original_amount??r.amount,fee=r.included_fee??0;return [csvCell(r.posted_date),csvCell(r.description),csvCell(r.merchant??""),csvCell(transactionType(r)),csvCell(decimalMoney(r.amount),false),csvCell(r.account_name??""),csvCell(r.category_name??""),csvCell(r.counter_account_name??""),csvCell(currency),csvCell(decimalAmount(total,currency),false),csvCell(r.exchange_rate??"1",false),csvCell(decimalAmount(fee,currency),false),csvCell(decimalAmount(total-fee,currency),false)].join(",");})].join("\r\n");
 }

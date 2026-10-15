@@ -1,0 +1,22 @@
+Issuer,UnionBank
+Statement month/title,January 2025
+Statement date,"Jan 7, 2025"
+Due date,"Jan 24, 2025"
+Credit limit,
+Previous balance,2130.27
+New charges,4223.64
+Payments/credits,2467.43
+Outstanding balance,3886.48
+Minimum due,500.00
+Statement notes,"Invalid Credit limit amount in source: Jul 10, 2035"
+
+Sale date,Post date,Merchant,Amount,Category,Transaction notes
+"Jan 5, 2025","Jan 7, 2025","STEAM PURCHASE, SEATTLE",615.00,,
+"Dec 12, 2024","Dec 13, 2024","GOOGLE *Loklok Drama M, g.co/helppay#",169.00,,
+"Dec 18, 2024","Dec 19, 2024",BDO BILLS PAYMENT ‐CASH,-2150.00,,
+"Dec 21, 2024","Dec 23, 2024","TIKTOK SHOP ONLINE, TAGUIG",317.43,,
+"Dec 23, 2024","Dec 26, 2024","TIKTOK SHOP ONLINE, TAGUIG",-317.43,,
+"Dec 24, 2024","Jan 7, 2025",(20/24) ABENSON VENTURES INC 2,756.21,,
+"Dec 27, 2024","Jan 2, 2025","H&M, QUEZON CITY",852.00,,
+"Dec 31, 2024","Jan 2, 2025","DOMINOS KAI MALL, CALOOCAN",919.00,,
+"Dec 31, 2024","Jan 2, 2025","PLK KAI MALL, CALOOCAN",595.00,,

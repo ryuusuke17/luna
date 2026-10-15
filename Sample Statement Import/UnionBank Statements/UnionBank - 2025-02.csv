@@ -1,0 +1,21 @@
+Issuer,UnionBank
+Statement month/title,February 2025
+Statement date,"Feb 7, 2025"
+Due date,"Feb 24, 2025"
+Credit limit,
+Previous balance,3886.48
+New charges,
+Payments/credits,
+Outstanding balance,4702.64
+Minimum due,500.00
+Statement notes,"Invalid Credit limit amount in source: Jul 10, 2035; Invalid New charges amount in source: Aug 11, 2030; Invalid Payments/credits amount in source: May 17, 2028"
+
+Sale date,Post date,Merchant,Amount,Category,Transaction notes
+"Jan 9, 2025","Jan 10, 2025","PIZZA HUT ZABARTE, CALOOCAN",929.00,,
+"Jan 9, 2025","Jan 10, 2025","PIZZA HUT ZABARTE, CALOOCAN",1030.70,,
+"Jan 12, 2025","Jan 13, 2025","GOOGLE *Loklok, g.co/helppay#",209.00,,
+"Jan 16, 2025","Jan 17, 2025",BDO BILLS PAYMENT ‐CASH,-3900.00,,
+"Jan 24, 2025","Feb 7, 2025",(21/24) ABENSON VENTURES INC 2,756.21,,
+"Feb 4, 2025","Feb 5, 2025","SILICON VALLEY‐SM FAIR, QUEZON CITY",42990.00,,
+"Feb 5, 2025","Feb 5, 2025",Credit for Transaction Instalment,-42990.00,,
+"Feb 5, 2025","Feb 7, 2025",(01/24) SILICON VALLEY‐SM FAIR,1791.25,,

@@ -75,3 +75,16 @@ test("statement removal errors retain safe actionable recovery",()=>{
 });
 
 test("statement approval conflicts stay actionable without exposing internals",()=>{assert.match(clearMessage("Unknown category: Travel")!,/Choose an explicit active category/);assert.match(clearMessage("Ambiguous category: Food")!,/Ambiguous/);assert.match(clearMessage("Payment funding required")!,/cash, bank or wallet/);assert.match(clearMessage("Statement or matches changed. Reload and review before approving.")!,/Evidence refreshed/);assert.equal(clearMessage("Unknown category: SQLITE constraint failed"),undefined);});
+
+test("standalone archive errors name the separate workflow and retain safe recovery",()=>{
+ assert.match(requestMessage(500,{message:"SQLITE_ERROR"},"statement-archives/1","PATCH"),/statement archive/);
+ assert.match(requestMessage(400,{message:"Invalid statement filters"},"statement-archives"),/clear them/);
+ assert.match(requestMessage(400,{message:"Save the statement as a UTF-8 CSV and try again"},"statement-archives","POST"),/UTF-8 CSV/);
+ assert.match(requestMessage(400,{message:"This statement changed. Reload it before changing the account link"},"statement-archives/1","PATCH"),/Reload/);
+});
+
+test("transaction import errors name the recovery without exposing technical details",()=>{
+ assert.match(requestMessage(400,{message:"Invalid row correction"},"statements/1","POST"),/posting date/);
+ assert.match(requestMessage(400,{message:"Matched transfer has a different destination or paying account"},"statements/1","POST"),/same destination/);
+ assert.match(requestMessage(500,{message:"SQLITE_ERROR"},"statements/1","POST"),/transaction imports/);
+});

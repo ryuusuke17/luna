@@ -1,0 +1,23 @@
+Issuer,UnionBank
+Statement month/title,December 2023
+Statement date,"Dec 10, 2023"
+Due date,"Dec 27, 2023"
+Credit limit,25000.00
+Previous balance,8669.95
+New charges,3957.85
+Payments/credits,8768.95
+Outstanding balance,3759.85
+Minimum due,500.00
+Statement notes,"Payments/Credits (source column 5): P8,867.95"
+
+Sale date,Post date,Merchant,Amount,Category,Transaction notes
+"Nov 10, 2023","Nov 13, 2023",LAZADA PH MAKATI PH,99.00,,
+"Nov 16, 2023","Nov 17, 2023",CASH PAYMENT - THANK YOU PH,-8768.95,,
+"Nov 18, 2023","Nov 20, 2023",LAZADA PH MAKATI PH,99.00,,
+"Nov 18, 2023","Nov 20, 2023",LAZADA PH MAKATI PH,99.00,,
+"Nov 18, 2023","Nov 20, 2023",LAZADA PH TAGUIG PH,99.00,,
+"Nov 19, 2023","Nov 20, 2023",JOLLIBEE JB1115 QUEZON CITY PH,441.00,,
+"Nov 21, 2023","Nov 22, 2023",LAZADA PH TAGUIG PH,-99.00,,
+"Nov 27, 2023","Nov 28, 2023",OCEANJET CEBU CITY PH,1320.00,,
+"Nov 27, 2023","Nov 28, 2023",RAMEN KURODASMFAIRVIEW QUEZON CITY PH,1044.64,,
+"Dec 7, 2023","Dec 7, 2023",ABENSON VENTURES INC 2 (007:024) PH,756.21,,

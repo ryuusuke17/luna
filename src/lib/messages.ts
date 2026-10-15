@@ -1,4 +1,7 @@
 const explanations: Record<string, string> = {
+  "Invalid statement filters": "Choose valid statement filters, or clear them and try again.",
+  "Include statement summary metadata above the Sale date, Post date, Merchant, Amount table": "Include statement summary metadata above the Sale date, Post date, Merchant, Amount table, then upload again.",
+  "Save the statement as a UTF-8 CSV and try again": "Save the statement as a UTF-8 CSV and try again.",
   "Invalid username or password": "The username or password is incorrect. Check both and try again. Usernames are case-sensitive.",
   "Too many attempts. Try again later": "Too many sign-in attempts. Wait 15 minutes before trying again.",
   "Owner already exists": "This workspace already has an owner. Sign in with the existing account instead.",
@@ -79,8 +82,12 @@ const explanations: Record<string, string> = {
   "Negative row requires explicit payment or refund classification": "Choose payment or refund classification for this negative row.",
   "Source already imported or conflicting; link or exclude this row": "Source already imported or conflicting; link or exclude this row.",
   "Possible duplicate requires a reason to import separately": "Possible duplicate requires a reason to import separately. Review source evidence before retrying.",
+  "Import row unavailable or invalid correction": "Choose an unresolved row from this upload, then reload before editing.",
+  "Invalid row correction": "Check the posting date, type, positive exact amount and text fields before saving this row.",
+  "Matched transfer has a different destination or paying account": "Choose the matching transfer with the same destination and paying account, or correct the selected accounts.",
+  "Transfers cannot have a category": "Transfers do not use categories. Clear the category before saving.",
   "Invalid review decision": "Check row membership, category, funding and resolution values before retrying.",
-  "Statement unavailable": "This statement is unavailable. Reload the archive and choose an existing upload.",
+  "Statement unavailable": "This upload is unavailable. Reload Transactions and choose an existing import.",
   "Statement unavailable. Check private storage or retry.": "Statement unavailable. Check private storage or retry.",
   "Only unapproved uploads can be removed. Approved or reconciled statements must be kept.": "Only unapproved uploads can be removed. Approved or reconciled statements must be kept.",
   "Statement changed. Close this dialog and review it again before removing.": "Statement changed. Close this dialog and review it again before removing.",
@@ -128,8 +135,8 @@ export function clearMessage(value: unknown): string | undefined {
 
 export function requestMessage(status: number, body: unknown, path: string, method = "GET"): string {
   const endpoint = path.split("?")[0];
-  const labels: Record<string, string> = {accounts:"accounts",transactions:"transactions",reports:"financial reports",budgets:"budgets",bills:"bill reminders",goals:"goals",categories:"categories",preferences:"workspace preferences","merchant-rules":"merchant rules",providers:"service providers","import-history":"import history",imports:"statement imports","csv-imports":"CSV imports","bill-payments":"bill payments","goal-contributions":"goal allocations",search:"search results",export:"export file","auth/me":"session details","auth/login":"sign-in","auth/setup":"owner setup","auth/logout":"sign-out"};
-  const label = labels[endpoint] ?? labels[endpoint.split("/")[0]] ?? "workspace records";
+  const labels: Record<string, string> = {accounts:"accounts",transactions:"transactions",reports:"financial reports",budgets:"budgets",bills:"bill reminders",goals:"goals",categories:"categories",preferences:"workspace preferences","merchant-rules":"merchant rules",providers:"service providers","import-history":"import history",statements:"transaction imports",imports:"statement imports","csv-imports":"CSV imports","bill-payments":"bill payments","goal-contributions":"goal allocations",search:"search results",export:"export file","auth/me":"session details","auth/login":"sign-in","auth/setup":"owner setup","auth/logout":"sign-out"};
+  const label = endpoint.split("/")[0] === "statement-archives" ? "statement archive" : labels[endpoint] ?? labels[endpoint.split("/")[0]] ?? "workspace records";
   if (status >= 500) return `Luna could not ${method === "GET" ? "load" : "process"} ${label} because the server encountered a problem. Try again shortly.${method !== "GET" ? " Check the records before retrying; the result is not confirmed." : ""}`;
   if (status === 401) return "Your session has ended. Sign in again to continue.";
   const payload = body && typeof body === "object" ? body as Record<string, unknown> : {};

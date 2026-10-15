@@ -1,4 +1,6 @@
 import Database from "better-sqlite3";
+import {transactionType} from "../../src/lib/transactions.ts";
+import {retireVerification} from "./transaction-first-migration.ts";
 import { mkdirSync } from "node:fs";
 import { dirname,resolve } from "node:path";
 const location=process.env.LUNA_DB_PATH===":memory:"?":memory:":resolve(process.env.LUNA_DB_PATH||"./data/luna.sqlite");if(location!==":memory:")mkdirSync(dirname(location),{recursive:true});
@@ -20,8 +22,20 @@ addColumn("sessions","csrf_hash","TEXT");addColumn("sessions","last_seen","TEXT 
 const owner=(db.prepare("SELECT id FROM users ORDER BY id LIMIT 1").get() as {id:number}|undefined)?.id;if(owner)for(const table of ["accounts","categories","transactions","budgets","audit_events"])db.prepare(`UPDATE ${table} SET owner_id=? WHERE owner_id IS NULL`).run(owner);
 db.exec("CREATE UNIQUE INDEX IF NOT EXISTS categories_owner_name_idx ON categories(owner_id,name); CREATE UNIQUE INDEX IF NOT EXISTS transactions_owner_idem_idx ON transactions(owner_id,idempotency_key); DROP INDEX IF EXISTS budgets_owner_month_idx; CREATE UNIQUE INDEX budgets_owner_month_idx ON budgets(owner_id,category_id,month); CREATE INDEX IF NOT EXISTS entry_account_idx ON account_entries(account_id); CREATE INDEX IF NOT EXISTS transaction_owner_date_idx ON transactions(owner_id,posted_date);");
 export function atomic<T>(fn:()=>T):T{return db.transaction(fn)()}
+db.exec(`
+CREATE TABLE IF NOT EXISTS statement_archives(
+ id INTEGER PRIMARY KEY,owner_id INTEGER NOT NULL REFERENCES users(id),
+ account_id INTEGER REFERENCES accounts(id) ON DELETE SET NULL,account_name_snapshot TEXT,
+ filename TEXT NOT NULL,file_key TEXT NOT NULL UNIQUE,file_hash TEXT NOT NULL,size INTEGER NOT NULL,
+ parser_version TEXT NOT NULL,summary_json TEXT NOT NULL,raw_summary_json TEXT NOT NULL,
+ rows_json TEXT NOT NULL,warnings_json TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 1,
+ created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,UNIQUE(owner_id,file_hash)
+);
+CREATE INDEX IF NOT EXISTS statement_archives_owner_idx ON statement_archives(owner_id,id);
+`);
 
-addColumn("transactions","merchant","TEXT NOT NULL DEFAULT ''");addColumn("transactions","notes","TEXT NOT NULL DEFAULT ''");addColumn("budgets","name","TEXT NOT NULL DEFAULT ''");
+addColumn("transactions","merchant","TEXT NOT NULL DEFAULT ''");addColumn("transactions","notes","TEXT NOT NULL DEFAULT ''");addColumn("transactions","is_installment","INTEGER CHECK(is_installment IN (0,1))");addColumn("budgets","name","TEXT NOT NULL DEFAULT ''");
+db.function("transaction_type",{deterministic:true},(kind,isInstallment,description,merchant,notes)=>transactionType({kind:String(kind),is_installment:isInstallment===null?null:Number(isInstallment),description:String(description),merchant:String(merchant),notes:String(notes)}));
 db.exec(`
 CREATE TABLE IF NOT EXISTS bills(id INTEGER PRIMARY KEY,owner_id INTEGER NOT NULL REFERENCES users(id),name TEXT NOT NULL,amount INTEGER NOT NULL CHECK(amount>0),due_date TEXT NOT NULL,account_id INTEGER NOT NULL REFERENCES accounts(id),category_id INTEGER REFERENCES categories(id),cadence TEXT NOT NULL DEFAULT 'once',notes TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS bill_payments(bill_id INTEGER PRIMARY KEY REFERENCES bills(id),owner_id INTEGER NOT NULL REFERENCES users(id),transaction_id INTEGER NOT NULL UNIQUE REFERENCES transactions(id),created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
@@ -72,3 +86,4 @@ CREATE TABLE IF NOT EXISTS workspace_resets(id INTEGER PRIMARY KEY,owner_id INTE
 addColumn("transactions","payment_method_id","INTEGER REFERENCES payment_methods(id)");
 
 addColumn("statement_entries","review_required","TEXT NOT NULL DEFAULT ''");
+retireVerification(db);

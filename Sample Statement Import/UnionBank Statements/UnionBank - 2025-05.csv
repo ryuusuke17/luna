@@ -1,0 +1,19 @@
+Issuer,UnionBank
+Statement month/title,May 2025
+Statement date,"May 7, 2025"
+Due date,"May 26, 2025"
+Credit limit,73500.00
+Previous balance,5696.43
+New charges,38381.04
+Payments/credits,
+Outstanding balance,1543.89
+Minimum due,500.00
+Statement notes,"Invalid Payments/credits amount in source: Jun 12, 2016"
+
+Sale date,Post date,Merchant,Amount,Category,Transaction notes
+"Apr 13, 2025","Apr 14, 2025",BDO BILLS PAYMENT ‐CASH,-5700.00,,
+"Apr 14, 2025","Apr 15, 2025",BDO BILLS PAYMENT ‐CASH,-1000.00,,
+"Apr 15, 2025","Apr 16, 2025","LAZADA PH, MAKATI",35833.58,,
+"Apr 24, 2025","May 7, 2025",(24/24) ABENSON VENTURES INC 2,756.21,,
+"May 4, 2025","May 5, 2025","LAZADA PH, MAKATI",-35833.58,,
+"May 5, 2025","May 7, 2025",(04/24) SILICON VALLEY‐SM FAIR,1791.25,,

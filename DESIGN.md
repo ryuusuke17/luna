@@ -634,3 +634,19 @@ The system has **no traditional drop-shadow language**. Surfaces register depth 
 - Logged-in app surfaces (transactions, transfers, account settings) are out of scope — only the public marketing canvas is documented.
 - The wide accent palette (`{colors.accent-teal}` through `{colors.accent-brown}`) is captured from the extracted token set, but exact usage inside product illustrations varies per market and product line; document per-illustration rather than as system buttons.
 - Mobile-app screenshot art direction (phone bezels, status bars) is product-photography territory and not standardised as design tokens.
+
+## Luna Workspace Overrides - October 15, 2026
+
+The preceding board remains a marketing reference. The existing React workspace is the authority for this narrow compact-layout refinement; no marketing font, imagery, palette replacement, or new dependency is introduced.
+
+- Keep the bundled Inter font, white/light-gray workspace, black sidebar/actions, cobalt focus/accent, existing semantic status colors, and reduced-motion handling.
+- Workspace type: 14 px body, 16 px editable fields, 28 px page headings (24 px on small screens), 20 px section headings, 18 px record headings; metrics scale from 22 to 28 px. The dashboard total scales from 28 to 40 px. The unchanged login display remains 48 to 88 px.
+- Workspace geometry: 16 px panel padding, existing rounded panels, 16 px dialogs, 6 px inline record-action focus boundaries, pill buttons. Preserve the existing 3 px focus outline; native date/month segments also retain a visible outline.
+- Use 40 px minimum desktop controls, 44 px controls for small screens/coarse pointers and dialogs. Do not trade readable labels, form validation, or touch targets for density.
+- Register a single contextual primary header action through PageAction. Keep transaction entry available through the quieter sidebar action and the guarded N shortcut. Search stays usable on mobile through its named dialog and / shortcut.
+- Put record maintenance in labeled More actions menus. Keep direct account/bill detail links and goal allocation actions discoverable. Open editors only after the menu closes and restores focus.
+- Show transaction rows as a table above a 960 px workspace-container width, as a semantic stacked list below it. Keep the exact same records, filters, pagination, and financial actions.
+- Dialogs use an internally scrollable region, persistent close control, wrapping footer actions in normal flow, and visible focus throughout keyboard cycling. Confirmations initially focus Cancel. Keep destructive warnings, explicit confirmation, pending-state locks, and error drafts.
+- Sidebar becomes a Sheet below 1024 px; compact mobile search replaces inline search below 561 px. Budget/goal summaries keep two columns at narrow widths.
+
+Validation evidence belongs in task.md; screenshots are fixtures, not a claim of physical-device or screen-reader certification.

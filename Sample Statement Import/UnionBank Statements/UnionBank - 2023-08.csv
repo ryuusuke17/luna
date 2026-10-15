@@ -1,0 +1,21 @@
+Issuer,UnionBank
+Statement month/title,August 2023
+Statement date,"Aug 7, 2023"
+Due date,"Aug 24, 2023"
+Credit limit,25000.00
+Previous balance,4608.04
+New charges,3317.36
+Payments/credits,4608.04
+Outstanding balance,3317.36
+Minimum due,500.00
+Statement notes,"Payments/Credits (source column 5): P4,608.04"
+
+Sale date,Post date,Merchant,Amount,Category,Transaction notes
+"Jul 9, 2023","Jul 10, 2023",CITIMART CALAPAN CALAPAN PH,159.52,,
+"Jul 11, 2023","Jul 12, 2023",FOODPANDA PAY MAKATI PH,341.00,,
+"Jul 15, 2023","Jul 17, 2023",CASH PAYMENT - THANK YOU PH,-4608.04,,
+"Jul 16, 2023","Jul 17, 2023",JOLLIBEE JB 3396 CALAPAN PH,193.00,,
+"Jul 17, 2023","Jul 19, 2023",MR DIY ZCLP CALAPAN PH,362.00,,
+"Jul 20, 2023","Jul 21, 2023",FOOD PANDA MAKATI PH,402.00,,
+"Jul 23, 2023","Jul 24, 2023",CITIMART CALAPAN CALAPAN PH,1103.64,,
+"Aug 7, 2023","Aug 7, 2023",ABENSON VENTURES INC 2 (003:024) PH,756.20,,

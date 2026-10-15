@@ -1,0 +1,18 @@
+Issuer,UnionBank
+Statement month/title,March 2025
+Statement date,"Mar 7, 2025"
+Due date,"Mar 24, 2025"
+Credit limit,
+Previous balance,4702.64
+New charges,2956.46
+Payments/credits,4710.00
+Outstanding balance,2949.10
+Minimum due,500.00
+Statement notes,"Invalid Credit limit amount in source: Jul 10, 2035"
+
+Sale date,Post date,Merchant,Amount,Category,Transaction notes
+"Feb 13, 2025","Feb 14, 2025","GOOGLE *Loklok, g.co/helppay#",209.00,,
+"Feb 19, 2025","Feb 20, 2025",BDO BILLS PAYMENT ‐CASH,-4710.00,,
+"Feb 24, 2025","Mar 7, 2025",(22/24) ABENSON VENTURES INC 2,756.21,,
+"Mar 1, 2025","Mar 3, 2025","GOOGLE *Magic Chess Go, g.co/helppay#",200.00,,
+"Mar 5, 2025","Mar 7, 2025",(02/24) SILICON VALLEY‐SM FAIR,1791.25,,

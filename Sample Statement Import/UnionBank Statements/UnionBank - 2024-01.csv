@@ -1,0 +1,26 @@
+Issuer,UnionBank
+Statement month/title,January 2024
+Statement date,"Jan 7, 2024"
+Due date,"Jan 24, 2024"
+Credit limit,25000.00
+Previous balance,3759.85
+New charges,6031.21
+Payments/credits,3759.85
+Outstanding balance,5733.21
+Minimum due,500.00
+Statement notes,"Payments/Credits (source column 5): P4,057.85"
+
+Sale date,Post date,Merchant,Amount,Category,Transaction notes
+"Dec 8, 2023","Dec 11, 2023",CONVERGE ICT ANGELES PH,1375.00,,
+"Dec 8, 2023","Dec 11, 2023",SHOPEE PH TAGUIG PH,1634.00,,
+"Dec 8, 2023","Dec 11, 2023",SHOPEE PH TAGUIG PH,144.00,,
+"Dec 8, 2023","Dec 11, 2023",SHOPEE PH TAGUIG PH,350.00,,
+"Dec 9, 2023","Dec 11, 2023",SHOPEE PH TAGUIG PH,556.00,,
+"Dec 10, 2023","Dec 11, 2023",JOLLIBEE JB 1013 CALAPAN PH,517.00,,
+"Dec 13, 2023","Dec 14, 2023",LAZADA PH MAKATI PH,99.00,,
+"Dec 16, 2023","Dec 18, 2023",CASH PAYMENT - THANK YOU PH,-3759.85,,
+"Dec 17, 2023","Dec 18, 2023",SHOPEE PH TAGUIG PH,-278.00,,
+"Dec 18, 2023","Dec 20, 2023",LAZADA PH MAKATI PH,20.00,,
+"Dec 18, 2023","Dec 20, 2023",SHOPEE PH TAGUIG PH,580.00,,
+"Dec 20, 2023","Dec 21, 2023",LAZADA PH MAKATI PH,-20.00,,
+"Jan 5, 2024","Jan 5, 2024",ABENSON VENTURES INC 2 (008:024) PH,756.21,,

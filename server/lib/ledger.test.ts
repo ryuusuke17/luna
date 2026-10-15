@@ -36,4 +36,18 @@ test("transfer corrections update both accounts; opening/adjustment semantics st
  const beforeCash=balanceFor(owner,cash),beforeCard=balanceFor(owner,card),input={kind:"transfer" as const,date:"2025-06-02",amount:100,accountId:cash,counterAccountId:card,idempotencyKey:"transfer-correct"};const tx=createTransaction(owner,input),replacement=correctTransaction(owner,tx.id,{...input,amount:200,idempotencyKey:"transfer-replacement"},transactionVersion(owner,tx.id));assert.equal(balanceFor(owner,cash),beforeCash-200);assert.equal(balanceFor(owner,card),beforeCard+200);voidTransaction(owner,replacement.id,transactionVersion(owner,replacement.id));assert.equal(balanceFor(owner,cash),beforeCash);
  const opening=(db.prepare("SELECT * FROM transactions WHERE idempotency_key='open-cash'").get() as any);assert.throws(()=>correctTransaction(owner,opening.id,{kind:"expense",date:opening.posted_date,amount:1,accountId:cash,categoryId:expenseCat,idempotencyKey:"unsafe-opening"},transactionVersion(owner,opening.id)),/keep their type/);
 });
+test("installments persist as spending, retry safely and can be explicitly reclassified",()=>{
+ const accountId=Number(db.prepare("INSERT INTO accounts(owner_id,name,type,opening_date) VALUES(?,'Installment card','credit_card','2025-01-01')").run(owner).lastInsertRowid);
+ const input={kind:"installment" as const,date:"2025-06-03",amount:179125,accountId,merchant:"Fixture merchant",description:"(2/12) Laptop",idempotencyKey:"installment-create"};
+ const created=createTransaction(owner,input);
+ assert.deepEqual(db.prepare("SELECT kind,is_installment,amount,merchant FROM transactions WHERE id=?").get(created.id),{kind:"expense",is_installment:1,amount:179125,merchant:"Fixture merchant"});
+ assert.equal(balanceFor(owner,accountId),-179125);assert.equal(createTransaction(owner,input).id,created.id);
+ assert.throws(()=>createTransaction(owner,{...input,kind:"expense",isInstallment:false}),/Request key/);
+ assert.throws(()=>createTransaction(owner,{...input,kind:"income",isInstallment:true,idempotencyKey:"invalid-installment"}),/Invalid installment/);
+ const correction={...input,kind:"expense" as const,isInstallment:false,idempotencyKey:"installment-correction"};
+ const corrected=correctTransaction(owner,created.id,correction,transactionVersion(owner,created.id));
+ assert.equal(db.prepare("SELECT is_installment FROM transactions WHERE id=?").get(corrected.id)?.is_installment,0);
+ assert.equal(balanceFor(owner,accountId),-179125);assert.equal(correctTransaction(owner,created.id,correction,"old-version").id,corrected.id);
+ assert.equal(db.prepare("SELECT transaction_type(kind,is_installment,description,merchant,notes) type FROM transactions WHERE id=?").get(corrected.id)?.type,"expense");
+});
 test.after(()=>db.close());
