@@ -8,7 +8,7 @@ import {useEffect,useState} from "react";
 import {useNavigate,useSearchParams} from "react-router-dom";
 import {useQuery,useMutation,useQueryClient} from "@tanstack/react-query";
 import {Button} from "@/components/WorkspaceButton";
-import {Dialog,DialogDescription,DialogHeader,DialogTitle} from "@/components/ui/dialog";
+import {Dialog,DialogHeader,DialogTitle} from "@/components/ui/dialog";
 import {api} from "@/lib/api";
 import {formatMoney} from "@/lib/finance";
 import {transactionType,transactionTypeLabel} from "@/lib/transactions";
@@ -39,14 +39,13 @@ return <><header className="page-heading"><div><h1>Transactions</h1><p className
 <TransactionFilters params={filters} accounts={accounts.data??[]} categories={categories.data??[]} onChange={(next,replace=false)=>setParams(next,{replace})}/>
 {status&&<p id="import-result" tabIndex={-1} role="status" className="mb-3">{status}</p>}{params.has("id")&&reveal.data&&!reveal.data.length&&<p role="status">Record deleted or unavailable</p>}{accounts.error||categories.error?<p role="alert" className="text-destructive">{(accounts.error??categories.error)?.message}</p>:null}{reveal.error&&<p role="alert" className="text-destructive">{reveal.error.message}</p>}{query.isPending?<p role="status">Loading transactions…</p>:query.error?<p role="alert" className="text-destructive">{query.error.message}</p>:!query.data.items.length?<div className="panel">{month||kind||category||account||search||start||end||source||batch||params.has("legacy")?"No transactions match these filters.":"No posted records yet. Set up an account and add a transaction."}</div>:<><div className="table-scroll records-table" role="region" aria-label="Transaction records, horizontally scrollable" tabIndex={0}><table><caption className="sr-only">Posted transactions</caption><thead><tr><th scope="col"><span className="sr-only">Type</span></th><th scope="col">Date</th><th scope="col">Merchant</th><th scope="col">Account</th><th scope="col">Amount</th><th scope="col">Source</th><th scope="col">Details</th></tr></thead><tbody>{query.data.items.map(t=><tr key={t.id}><td><TransactionTypeIcon type={transactionType(t)}/></td><td className="whitespace-nowrap">{t.posted_date}</td><td className="min-w-40">{t.merchant||"Not provided"}<span className="block break-words text-sm text-muted-foreground">{t.category_name??(["expense","income","refund"].includes(t.kind)?"Uncategorized":"Not applicable")}{t.description&&<> ㆍ {t.description}</>}</span></td><td>{t.account_name}</td><td className="amount font-semibold">{t.kind==="expense"||t.kind==="transfer"?"−":"+"}{formatMoney(t.amount)}<span className="block text-sm text-muted-foreground">PHP</span></td><td>{t.source??"manual"}</td><td><Button variant="outline" className="min-h-11" aria-label={`View ${t.merchant||t.description||transactionTypeLabel(transactionType(t))} on ${t.posted_date}`} onClick={()=>setSelected(t)}>View</Button></td></tr>)}</tbody></table></div><ul className="record-list records-list rounded-lg border bg-card" aria-label="Posted transactions">{query.data.items.map(t=><li key={t.id}><div className="record-line"><div><button className="record-title" aria-label={`View ${t.merchant||t.description||transactionTypeLabel(transactionType(t))} on ${t.posted_date}`} onClick={()=>setSelected(t)}>{t.merchant||t.description||transactionTypeLabel(transactionType(t))}</button><p className="break-words text-sm text-muted-foreground">{t.category_name??(["expense","income","refund"].includes(t.kind)?"Uncategorized":"Not applicable")}{t.description&&<> ㆍ {t.description}</>}</p></div><span className="record-amount">{t.kind==="expense"||t.kind==="transfer"?"−":"+"}{formatMoney(t.amount)}<span className="block text-xs font-normal text-muted-foreground">PHP</span></span></div><div className="record-meta"><TransactionTypeIcon type={transactionType(t)}/><span>{t.posted_date}</span><span>{t.account_name}</span><span>{t.source??"manual"}</span></div></li>)}</ul><nav aria-label="Transaction pagination" className="mt-4 flex flex-wrap items-center justify-between gap-3"><p role="status">{query.data.total} records · page {page} of {Math.ceil(query.data.total/query.data.pageSize)}</p><div className="flex gap-2"><Button variant="outline" className="min-h-11" disabled={page===1} onClick={()=>filter("page",String(page-1))}>Previous</Button><Button variant="outline" className="min-h-11" disabled={page*query.data.pageSize>=query.data.total} onClick={()=>filter("page",String(page+1))}>Next</Button></div></nav></>}
 <Dialog open={Boolean(selected)} onOpenChange={v=>{if(!v)setSelected(null);}}>
- <DialogContent className="transaction-details-dialog">
+ <DialogContent className="transaction-details-dialog" aria-describedby={undefined}>
   <DialogHeader>
    <DialogTitle className="text-xl leading-snug">{selected&&(selected.merchant||selected.description||transactionTypeLabel(transactionType(selected)))}</DialogTitle>
-   <DialogDescription>Ledger record #{selected?.id} · {selected?.posted_date}</DialogDescription>
   </DialogHeader>
   {selected&&<div className="space-y-5">
    <section aria-label="Transaction amount" className="rounded-lg border bg-secondary p-4 sm:p-5">
-    <dl><div><dt className="text-sm text-muted-foreground">Converted amount · PHP</dt><dd className="mt-1 text-3xl font-semibold tabular-nums">{formatMoney(selected.amount)}</dd></div></dl>
+    <p className="text-3xl font-semibold tabular-nums">{formatMoney(selected.amount)}</p>
     <p className="mt-3 flex items-center gap-2 text-sm font-medium"><TransactionTypeIcon type={transactionType(selected)}/>{transactionTypeLabel(transactionType(selected))}</p>
    </section>
    <section aria-labelledby="transaction-breakdown-heading">
@@ -55,7 +54,6 @@ return <><header className="page-heading"><div><h1>Transactions</h1><p className
      <div><dt>Original total · {selected.original_currency}</dt><dd>{formatMoney(selected.original_amount,selected.original_currency)}</dd></div>
      <div><dt>Subtotal</dt><dd>{formatMoney(selected.original_amount-selected.included_fee,selected.original_currency)}</dd></div>
      <div><dt>Included fee</dt><dd>{formatMoney(selected.included_fee,selected.original_currency)}</dd></div>
-     <div><dt>Exchange rate</dt><dd>1 {selected.original_currency} = {selected.exchange_rate} PHP</dd></div>
     </dl>
    </section>
    <section aria-labelledby="transaction-information-heading">
