@@ -67,6 +67,7 @@
  .table-scroll { @apply max-w-full overflow-x-auto rounded-lg border bg-card; }
  .records-table[aria-label="Transaction records, horizontally scrollable"] :is(th,td) { @apply px-5 py-4 align-middle; }
  .records-table[aria-label="Transaction records, horizontally scrollable"] th { @apply py-3; }
+ .records-table[aria-label="Transaction records, horizontally scrollable"] :is(th,td):first-child { @apply pl-8; }
  .records-table[aria-label="Transaction records, horizontally scrollable"] :is(th,td):is(:first-child,:nth-child(2),:nth-child(5),:nth-child(6),:last-child) { @apply w-px whitespace-nowrap; }
  .records-table[aria-label="Transaction records, horizontally scrollable"] :is(th,td):nth-child(5) { @apply text-right; }
  .records-table[aria-label="Transaction records, horizontally scrollable"] td.amount > span { @apply ml-1 !inline; }
