@@ -1,5 +1,5 @@
 import {useId, useState} from "react";
-import {CalendarDays, ChevronDown, ChevronLeft, ChevronRight, SlidersHorizontal} from "lucide-react";
+import {CalendarDays, ChevronLeft, ChevronRight, SlidersHorizontal} from "lucide-react";
 import {Button} from "@/components/WorkspaceButton";
 import DialogContent from "@/components/WorkspaceDialogContent";
 import {Dialog, DialogDescription, DialogHeader, DialogTitle, DialogTrigger} from "@/components/ui/dialog";
@@ -49,7 +49,6 @@ export default function TransactionFilters({params, accounts, categories, onChan
           <Button variant="ghost" className="h-auto min-w-0 flex-1 gap-2 whitespace-normal rounded-none px-2 text-center" aria-label={`Date filter: ${dateLabel}`}>
             <CalendarDays className="size-4 shrink-0" aria-hidden="true"/>
             <span className="min-w-0">{dateLabel}</span>
-            <ChevronDown className="size-4 shrink-0" aria-hidden="true"/>
           </Button>
         </PopoverTrigger>
         <Button type="button" variant="ghost" size="icon" className="h-auto shrink-0 rounded-l-none" aria-label="Next month" disabled={!nextMonth} onClick={() => nextMonth && onChange(applyTransactionDate(params, {mode: "month", month: nextMonth, start: "", end: ""}))}>
