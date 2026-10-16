@@ -1,6 +1,6 @@
 import {useState} from "react";
 import {useNavigate} from "react-router-dom";
-import {ArrowUpRight} from "lucide-react";
+import {ArrowUpRight,LockKeyhole} from "lucide-react";
 import LunaLogo from "@/components/LunaLogo";
 import {send} from "@/lib/api";
 
@@ -15,7 +15,7 @@ export default function Login(){
     <h1 className="login-display">A clearer view.<br/><span className="text-white/55">A little more<br className="hidden lg:block"/> freedom.</span></h1>
     <p className="mt-8 hidden max-w-sm text-base leading-relaxed text-white/70 lg:block">Know where you stand. Make space for what comes next. Your private finance workspace, all in one place.</p>
    </div>
-   <div className="hidden flex-wrap items-center justify-end gap-4 border-t border-white/15 pt-5 text-xs text-white/65 lg:flex"><span>PHP · Personal finance</span></div>
+   <div className="hidden flex-wrap items-center justify-between gap-4 border-t border-white/15 pt-5 text-xs text-white/65 lg:flex"><span className="inline-flex items-center gap-2"><LockKeyhole size={14} aria-hidden/>Your finances stay on your server.</span></div>
   </section>
   <section className="flex flex-col justify-center px-6 py-12 sm:px-12 lg:p-16">
    <form aria-busy={busy} onSubmit={submit} className="mx-auto w-full max-w-sm">
