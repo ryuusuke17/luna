@@ -79,7 +79,7 @@ export default function Index(){
       const date=`${month}-${String(i+1).padStart(2,"0")}`,events=calendar[date];
       const counts=[events?.bills.length??0,events?.statements.length??0,events?.goals.length??0];
       const label=sources.map((source,index)=>`${source.label}: ${counts[index]}${source.query.error?", unavailable; count may be incomplete":source.query.isFetching||source.query.isPending?", loading; count may be incomplete":""}`).join("; ");
-      return <button type="button" key={date} data-has-events={counts.some(count=>count>0)?"true":undefined} aria-current={date===today?"date":undefined} aria-pressed={day===date} aria-label={`${new Date(`${date}T12:00:00`).toLocaleDateString("en-PH",{dateStyle:"full"})}${date===today?", Today":""}; ${label}; ${day===date?"selected":"not selected"}`} className="calendar-day relative grid h-12 w-full min-w-0 place-items-center rounded-md border border-transparent p-0 text-center text-sm" onClick={()=>setDay(date)}>
+      return <button type="button" key={date} data-has-events={counts.some(count=>count>0)?"true":undefined} aria-current={date===today?"date":undefined} aria-pressed={day===date} aria-label={`${new Date(`${date}T12:00:00`).toLocaleDateString("en-PH",{dateStyle:"full"})}${date===today?", Today":""}; ${label}; ${day===date?"selected":"not selected"}`} className="calendar-day relative grid h-12 w-full min-w-0 place-items-center rounded-md border border-transparent p-0 text-center text-sm" onClick={()=>setDay(selectedDay=>selectedDay===date?null:date)}>
        <span>{i+1}</span><span className="absolute inset-x-0 bottom-1 flex h-2 items-center justify-center gap-0.5" aria-hidden>{sources.map((source,index)=>counts[index]>0?<span key={source.key} className={`calendar-marker calendar-marker-${source.key}`}/>:null)}</span>
       </button>;
      })}
@@ -89,22 +89,37 @@ export default function Index(){
      {sources.map(source=><li key={source.key} className="flex items-center gap-2"><span className={`calendar-marker calendar-marker-${source.key}`} aria-hidden/>{source.label}</li>)}
     </ul>
     <p className="sr-only" role="status" aria-atomic="true">{day?`${new Date(`${day}T12:00:00`).toLocaleDateString("en-PH",{dateStyle:"full"})}. ${sources.map(s=>`${s.label}: ${s.count}${s.query.error?", unavailable":s.query.isFetching||s.query.isPending?", loading":""}`).join(". ")}.`:"Select a date."}</p>
-    <div className="mt-4 min-w-0 border-t pt-4 text-sm">
-     {day?<>
-      <h3 className="text-sm font-semibold">{new Date(`${day}T12:00:00`).toLocaleDateString("en-PH",{dateStyle:"full"})}</h3>
-      {calendarComplete&&selectedCount===0?<p className="mt-2 text-muted-foreground">No events on this date</p>:<div className="mt-3 space-y-4">
-       <section aria-labelledby="calendar-bills"><h4 id="calendar-bills" className="font-semibold">Bills</h4>
-        {selected?.bills.length?<ul className="mt-1 divide-y">{selected.bills.map(b=><li key={b.id} className="min-w-0 py-2"><Link className="inline-flex min-h-11 max-w-full items-center font-medium underline underline-offset-4" to={`/bills?id=${b.id}`}>{b.name}</Link><p className="tabular-nums">{formatMoney(b.amount)} · {b.transaction_id?"Paid":"Unpaid"}</p></li>)}</ul>:<p className="mt-1 text-xs text-muted-foreground">{bills.error?"Bills unavailable; retry above.":bills.isFetching||bills.isPending?"Loading Bills…":"No bills on this date."}</p>}
-       </section>
-       <section aria-labelledby="calendar-statements"><h4 id="calendar-statements" className="font-semibold">Statement dues</h4>
-        {selected?.statements.length?<ul className="mt-1 divide-y">{selected.statements.map(s=><li key={s.id} className="min-w-0 py-2"><Link className="inline-flex min-h-11 max-w-full items-center font-medium underline underline-offset-4" to={`/statements?document=${s.id}`}>{s.card_name} · Statement #{s.id}</Link><p className="tabular-nums">Original balance {formatMoney(s.original_balance,s.currency)} · Minimum due {formatMoney(s.minimum_due,s.currency)}</p><p>{statusLabel(s.status)}</p><p className="text-xs text-muted-foreground">{s.tracking_confirmed?"User-confirmed tracking":"Payment coverage unknown / partial evidence"}</p></li>)}</ul>:<p className="mt-1 text-xs text-muted-foreground">{statements.error?"Statement dues unavailable; retry above.":statements.isFetching||statements.isPending?"Loading Statement dues…":"No statement dues on this date."}</p>}
-       </section>
-       <section aria-labelledby="calendar-goals"><h4 id="calendar-goals" className="font-semibold">Goals</h4>
-        {selected?.goals.length?<ul className="mt-1 divide-y">{selected.goals.map(g=><li key={g.id} className="min-w-0 py-2"><Link className="inline-flex min-h-11 max-w-full items-center font-medium underline underline-offset-4" to="/goals">{g.name}</Link><p className="tabular-nums">{formatMoney(g.allocated)} of {formatMoney(g.target)} target · {g.allocated>=g.target?"Achieved":"Active"}</p></li>)}</ul>:<p className="mt-1 text-xs text-muted-foreground">{goals.error?"Goals unavailable; retry above.":goals.isFetching||goals.isPending?"Loading Goals…":"No goals on this date."}</p>}
-       </section>
-      </div>}
-     </>:<p className="text-muted-foreground">Select a date.</p>}
-    </div>
+    {day&&<div className="mt-4 min-w-0 border-t pt-4 text-sm">
+     <h3 className="text-sm font-semibold">{new Date(`${day}T12:00:00`).toLocaleDateString("en-PH",{dateStyle:"full"})}</h3>
+     {calendarComplete&&selectedCount===0&&<p className="mt-2 text-muted-foreground">No events on this date</p>}
+     <div className="space-y-4">
+      {Boolean(selected?.bills.length)&&<table className="calendar-events mt-3 w-full table-fixed text-xs">
+       <caption className="pb-2 text-left text-sm font-semibold">Bills</caption>
+       <thead><tr><th scope="col">Bill</th><th scope="col">Amount</th><th scope="col">Status</th></tr></thead>
+       <tbody>{selected!.bills.map(b=><tr key={b.id}>
+        <th scope="row"><Link className="inline-flex min-h-11 max-w-full items-center font-medium underline underline-offset-4" to={`/bills?id=${b.id}`}>{b.name}</Link></th>
+        <td className="tabular-nums">{formatMoney(b.amount)}</td><td>{b.transaction_id?"Paid":"Unpaid"}</td>
+       </tr>)}</tbody>
+      </table>}
+      {Boolean(selected?.statements.length)&&<table className="calendar-events mt-3 w-full table-fixed text-xs">
+       <caption className="pb-2 text-left text-sm font-semibold">Statement dues</caption>
+       <thead><tr><th scope="col">Statement</th><th scope="col">Amount</th><th scope="col">Tracker status</th></tr></thead>
+       <tbody>{selected!.statements.map(s=><tr key={s.id}>
+        <th scope="row"><Link className="inline-flex min-h-11 max-w-full items-center font-medium underline underline-offset-4" to={`/statements?document=${s.id}`}>{s.card_name} · Statement #{s.id}</Link></th>
+        <td className="tabular-nums"><p>Original balance {formatMoney(s.original_balance,s.currency)}</p><p className="mt-1">Minimum due {formatMoney(s.minimum_due,s.currency)}</p></td>
+        <td><p>{statusLabel(s.status)}</p><p className="mt-1 text-muted-foreground">{s.tracking_confirmed?"User-confirmed tracking":"Payment coverage unknown / partial evidence"}</p></td>
+       </tr>)}</tbody>
+      </table>}
+      {Boolean(selected?.goals.length)&&<table className="calendar-events mt-3 w-full table-fixed text-xs">
+       <caption className="pb-2 text-left text-sm font-semibold">Goals</caption>
+       <thead><tr><th scope="col">Goal</th><th scope="col">Progress</th><th scope="col">Status</th></tr></thead>
+       <tbody>{selected!.goals.map(g=><tr key={g.id}>
+        <th scope="row"><Link className="inline-flex min-h-11 max-w-full items-center font-medium underline underline-offset-4" to="/goals">{g.name}</Link></th>
+        <td className="tabular-nums">{formatMoney(g.allocated)} of {formatMoney(g.target)} target</td><td>{g.allocated>=g.target?"Achieved":"Active"}</td>
+       </tr>)}</tbody>
+      </table>}
+     </div>
+    </div>}
    </section>
    <section className="panel"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="eyebrow mb-2">Where it goes</p><h2>Spending breakdown</h2></div><label className="relative inline-flex items-center"><span className="sr-only">Breakdown grouping</span><select className="min-h-11 max-w-full appearance-none rounded-full border bg-card pl-4 pr-9 py-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-ring" value={breakdown} onChange={e=>setBreakdown(e.target.value)}><option value="category">Category</option><option value="merchant">Merchant</option></select><ChevronDown size={16} className="pointer-events-none absolute right-3 text-muted-foreground" aria-hidden/></label></div>{report.isPending?<p role="status">Loading breakdown…</p>:report.error?<p role="alert">Breakdown unavailable.</p>:breakdownRows?.length?<ul className="mt-5 divide-y">{breakdownRows.map((row,i)=><li key={row.name} className="flex flex-wrap items-center justify-between gap-3 py-4"><span className="flex items-center gap-3 text-sm"><span className="size-2 shrink-0 rounded-full" style={{backgroundColor:`hsl(var(--chart-${i%5+1}))`}} aria-hidden/>{row.name}</span><strong className="text-sm font-semibold tabular-nums">{formatMoney(row.amount)}</strong></li>)}</ul>:<p className="my-10 text-sm text-muted-foreground">No recorded spending breakdown.</p>}</section>
    <section className="panel"><p className="eyebrow mb-2">The everyday</p><h2>Daily spending</h2><p className="mt-2 text-sm text-muted-foreground">Purchases less refunds. Unrecorded dates are not inferred.</p>{report.isPending?<p role="status" className="mt-5">Loading daily spending…</p>:report.error?<p role="alert">Unable to load chart.</p>:r?.daily.length?<><div className="mt-6 h-64 text-xs" aria-hidden><ResponsiveContainer><AreaChart data={r.daily} margin={{left:0,right:12,top:10,bottom:0}}><CartesianGrid stroke="hsl(var(--border))" vertical={false}/><XAxis dataKey="name" tickFormatter={v=>String(v).slice(8)} stroke="hsl(var(--muted-foreground))" axisLine={false} tickLine={false} tickMargin={12}/><YAxis stroke="hsl(var(--muted-foreground))" tickFormatter={v=>`₱${Number(v)/100}`} axisLine={false} tickLine={false} width={65}/><Tooltip formatter={v=>formatMoney(Number(v))}/><Area type="monotone" dataKey="amount" stroke="hsl(var(--chart-1))" strokeWidth={2.5} fill="hsl(var(--chart-1))" fillOpacity={.07}/></AreaChart></ResponsiveContainer></div><details className="mt-3 border-t"><summary className="min-h-11 py-3 text-sm font-semibold">View daily spending table</summary><div className="table-scroll" role="region" aria-label="Daily spending table" tabIndex={0}><table><caption className="sr-only">Daily spending</caption><thead><tr><th scope="col">Date</th><th scope="col">Spending</th></tr></thead><tbody>{r.daily.map(d=><tr key={d.name}><th scope="row">{d.name}</th><td className="amount">{formatMoney(d.amount)}</td></tr>)}</tbody></table></div></details></>:<p className="my-10 text-sm text-muted-foreground">No recorded spending in this period.</p>}</section>
