@@ -93,16 +93,14 @@ export default function Index(){
      <h3 className="text-sm font-semibold">{new Date(`${day}T12:00:00`).toLocaleDateString("en-PH",{dateStyle:"full"})}</h3>
      {calendarComplete&&selectedCount===0&&<p className="mt-2 text-muted-foreground">No events on this date</p>}
      <div className="space-y-4">
-      {Boolean(selected?.bills.length)&&<table className="calendar-events mt-3 w-full table-fixed text-xs">
-       <caption className="pb-2 text-left text-sm font-semibold">Bills</caption>
+      {Boolean(selected?.bills.length)&&<table aria-label="Bills" className="calendar-events mt-3 w-full table-fixed text-xs">
        <thead><tr><th scope="col">Bill</th><th scope="col">Amount</th><th scope="col">Status</th></tr></thead>
        <tbody>{selected!.bills.map(b=><tr key={b.id}>
         <th scope="row"><Link className="inline-flex min-h-11 max-w-full items-center font-medium underline underline-offset-4" to={`/bills?id=${b.id}`}>{b.name}</Link></th>
         <td className="tabular-nums">{formatMoney(b.amount)}</td><td>{b.transaction_id?"Paid":"Unpaid"}</td>
        </tr>)}</tbody>
       </table>}
-      {Boolean(selected?.statements.length)&&<table className="calendar-events mt-3 w-full table-fixed text-xs">
-       <caption className="pb-2 text-left text-sm font-semibold">Statement dues</caption>
+      {Boolean(selected?.statements.length)&&<table aria-label="Statement dues" className="calendar-events mt-3 w-full table-fixed text-xs">
        <thead><tr><th scope="col">Statement</th><th scope="col">Amount</th><th scope="col">Tracker status</th></tr></thead>
        <tbody>{selected!.statements.map(s=><tr key={s.id}>
         <th scope="row"><Link className="inline-flex min-h-11 max-w-full items-center font-medium underline underline-offset-4" to={`/statements?document=${s.id}`}>{s.card_name} · Statement #{s.id}</Link></th>
@@ -110,8 +108,7 @@ export default function Index(){
         <td><p>{statusLabel(s.status)}</p><p className="mt-1 text-muted-foreground">{s.tracking_confirmed?"User-confirmed tracking":"Payment coverage unknown / partial evidence"}</p></td>
        </tr>)}</tbody>
       </table>}
-      {Boolean(selected?.goals.length)&&<table className="calendar-events mt-3 w-full table-fixed text-xs">
-       <caption className="pb-2 text-left text-sm font-semibold">Goals</caption>
+      {Boolean(selected?.goals.length)&&<table aria-label="Goals" className="calendar-events mt-3 w-full table-fixed text-xs">
        <thead><tr><th scope="col">Goal</th><th scope="col">Progress</th><th scope="col">Status</th></tr></thead>
        <tbody>{selected!.goals.map(g=><tr key={g.id}>
         <th scope="row"><Link className="inline-flex min-h-11 max-w-full items-center font-medium underline underline-offset-4" to="/goals">{g.name}</Link></th>
