@@ -1,17 +1,16 @@
 import PaymentMethods from "@/components/PaymentMethods";
-import RecordActions from "@/components/RecordActions";
+import AccountCard, { type Account } from "@/components/AccountCard";
 import {usePageAction} from "@/components/PageAction";
 import {transactionType,transactionTypeLabel} from "@/lib/transactions";
 import AccountDeletionDialog from "@/components/AccountDeletionDialog";
 import {useQuery,useQueryClient} from "@tanstack/react-query";
 import {useSearchParams,Link} from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { X, Wallet, CreditCard, ArrowUpRight } from "lucide-react";
+import { X, Wallet, ArrowUpRight } from "lucide-react";
 import { api, send } from "@/lib/api";
 import { formatMoney } from "@/lib/finance";
 import { cardNetworks, cardProducts, ewalletProviders, type CardType } from "@/lib/card-directory";
 
-type Account = { id: number; name: string; type: string; balance: number; opening_date: string; reconciliation_stale?:number;issuer?: string; product?: string; network?: string; liquid?: number; last4?: string; credit_limit?: number | null };
 type AccountType = "cash" | "bank" | "wallet" | "credit_card" | "loan" | "asset" | "liability";
 const options: { value: AccountType; label: string; cardType?: CardType }[] = [
   { value: "credit_card", label: "Credit card", cardType: "credit" },
@@ -19,7 +18,6 @@ const options: { value: AccountType; label: string; cardType?: CardType }[] = [
   { value: "wallet", label: "E-wallet", cardType: "ewallet" },
   { value: "cash", label: "Cash" }, { value: "loan", label: "Loan" }, { value: "asset", label: "Other asset" }, { value: "liability", label: "Other liability" },
 ];
-const labels: Record<string, string> = { credit_card: "Credit card", bank: "Debit card / bank", wallet: "E-wallet", cash: "Cash", loan: "Loan", asset: "Other asset", liability: "Other liability" };
 
 export default function Accounts() {
   const client=useQueryClient(),[params]=useSearchParams(),[selected,setSelected]=useState<Account|null>(null),[busy,setBusy]=useState(false);
@@ -100,7 +98,7 @@ export default function Accounts() {
     {show && accountForm(false)}{editing && <div className="my-5">{accountForm(true)}</div>}
     {error && <p id="account-error" role="alert" className="my-4 text-destructive">{error}</p>}
     <div className="mb-5 grid gap-4 sm:grid-cols-2"><article data-dark className="dark-band rounded-lg p-4"><div className="flex items-center justify-between gap-3"><p className="text-sm text-white/70">Recorded assets</p><Wallet size={20} aria-hidden/></div><p className="metric">{query.isPending||query.error?"—":formatMoney(items.reduce((n,a)=>n+Math.max(0,a.balance),0))}</p><p className="mt-3 text-xs text-white/65">Positive recorded account balances</p></article><article className="panel"><div className="flex items-center justify-between gap-3"><p className="text-sm text-muted-foreground">Recorded debt</p><ArrowUpRight size={20} aria-hidden/></div><p className="metric">{query.isPending||query.error?"—":formatMoney(items.reduce((n,a)=>n+Math.max(0,-a.balance),0))}</p><p className="mt-3 text-xs text-muted-foreground">Negative recorded account balances</p></article></div>
-    {query.isPending?<p role="status">Loading accounts…</p>:query.error?<p role="alert" className="text-destructive">{query.error.message}</p>:<div className="space-y-5">{[["Cash, bank and wallet",["cash","bank","wallet"]],["Credit cards",["credit_card"]],["Other accounts",["loan","asset","liability"]]].map(([label,types])=><section key={String(label)}><h2 className="mb-3">{String(label)}</h2>{items.some(a=>(types as string[]).includes(a.type))?<ul className="record-list rounded-lg border bg-card">{items.filter(a=>(types as string[]).includes(a.type)).map(account=><li key={account.id}><div className="record-line"><div className="flex min-w-0 items-center gap-3"><span className="hidden size-9 shrink-0 place-items-center rounded-full bg-secondary sm:grid">{account.type==="credit_card"?<CreditCard size={21} strokeWidth={1.5} aria-hidden/>:<Wallet size={21} strokeWidth={1.5} aria-hidden/>}</span><div className="min-w-0"><h3><button className="record-title" aria-label={`View account details for ${account.name}`} onClick={()=>setSelected(account)}>{account.name}</button></h3><p className="text-xs text-muted-foreground">{labels[account.type]} · Recorded since {account.opening_date}</p></div></div><RecordActions name={account.name} actions={[{label:"View account details",onSelect:()=>setSelected(account)},{label:"Edit details",disabled:busy,onSelect:()=>startEdit(account)},{label:"Delete account",destructive:true,onSelect:()=>setDeleting(account.id)}]}/></div><p className="mt-2 text-sm text-muted-foreground">{[account.issuer,account.product,account.network].filter(Boolean).join(" · ")||"No directory metadata"}</p><p className="metric">{formatMoney(account.balance)}</p><p className="text-xs text-muted-foreground">{account.balance<0?"Recorded debt":"Recorded balance"}</p>{account.type==="credit_card"&&account.credit_limit?<><p className="mt-3 text-sm">Credit utilization: {Math.round(Math.max(0,-account.balance)/account.credit_limit*100)}% · limit {formatMoney(account.credit_limit)}</p><div className="mt-2 h-3 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label={account.name+" credit utilization"} aria-valuemin={0} aria-valuemax={account.credit_limit} aria-valuenow={Math.min(account.credit_limit,Math.max(0,-account.balance))} aria-valuetext={formatMoney(Math.max(0,-account.balance))+" owed of "+formatMoney(account.credit_limit)+" limit"}><div className="h-full bg-primary" style={{width:Math.min(100,Math.max(0,-account.balance)/account.credit_limit*100)+"%"}}/></div></>:null}</li>)}</ul>:<p className="text-muted-foreground">No accounts in this group.</p>}</section>)}</div>}
+    {query.isPending?<p role="status">Loading accounts…</p>:query.error?<p role="alert" className="text-destructive">{query.error.message}</p>:<div className="space-y-5">{[["Cash, bank and wallet",["cash","bank","wallet"]],["Credit cards",["credit_card"]],["Other accounts",["loan","asset","liability"]]].map(([label,types])=><section key={String(label)}><h2 className="mb-3">{String(label)}</h2>{items.some(a=>(types as string[]).includes(a.type))?<ul className="luna-account-grid">{items.filter(a=>(types as string[]).includes(a.type)).map(account=><AccountCard key={account.id} account={account} busy={busy} onView={()=>setSelected(account)} onEdit={()=>startEdit(account)} onDelete={()=>setDeleting(account.id)}/>)}</ul>:<p className="text-muted-foreground">No accounts in this group.</p>}</section>)}</div>}
     <PaymentMethods accounts={items}/>
     {params.has("id")&&!selected&&!query.isPending&&<p role="status">Record deleted or unavailable</p>}
     {deleting!==null&&<AccountDeletionDialog id={deleting} onClose={()=>{setDeleting(null);setSelected(null);document.getElementById("main")?.focus();}}/>}

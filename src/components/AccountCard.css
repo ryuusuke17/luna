@@ -1,0 +1,127 @@
+.luna-account-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 28rem), 1fr));
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.luna-account-card {
+  --account-ink: #fff;
+  --account-blue-light: #42799f;
+  --account-blue-mid: #32658e;
+  --account-blue-deep: #203f68;
+  --account-rim: #a5c9de;
+  --account-gold-light: #eee7b9;
+  --account-gold-deep: #b8ac72;
+  --account-gold-line: #746d4c;
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  min-height: min-content;
+  aspect-ratio: 1.58;
+  padding: 20px;
+  border: 1px solid var(--account-rim);
+  border-radius: 20px;
+  color: var(--account-ink);
+  background:
+    radial-gradient(ellipse at 95% 0%, var(--account-blue-light), transparent 65%),
+    linear-gradient(160deg, var(--account-blue-light), var(--account-blue-mid) 48%, var(--account-blue-deep));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 22%), inset 0 -1px 0 rgb(0 0 0 / 18%), 0 4px 10px rgb(21 50 78 / 12%);
+}
+
+.luna-account-card > :not(.luna-account-watermark) { flex-shrink: 0; }
+.luna-account-card p { text-shadow: 0 1px 2px rgb(0 0 0 / 65%); }
+.luna-account-watermark {
+  position: absolute;
+  z-index: -1;
+  inset: 38% 0 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 0 0 19px 19px;
+  color: rgb(255 255 255 / 5%);
+  font-size: clamp(90px, 15vw, 180px);
+  line-height: .8;
+  font-weight: 900;
+  font-style: italic;
+  letter-spacing: -.09em;
+  pointer-events: none;
+  user-select: none;
+}
+.luna-account-title {
+  display: block;
+  max-width: 100%;
+  min-height: 44px;
+  border-radius: 4px;
+  color: var(--account-ink);
+  text-align: left;
+  font-size: 18px;
+  line-height: 1.2;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  text-shadow: 0 1px 0 rgb(255 255 255 / 35%), 0 2px 2px rgb(0 0 0 / 60%);
+}
+.luna-account-title:hover { text-decoration: underline; text-underline-offset: 4px; }
+.luna-account-title:active { opacity: .8; }
+.luna-account-card [aria-haspopup="menu"] {
+  width: 44px;
+  height: 44px;
+  color: var(--account-ink);
+  border-radius: 50%;
+}
+.luna-account-card [aria-haspopup="menu"]:is(:hover, [data-state="open"]) { background: rgb(255 255 255 / 15%); }
+.luna-account-card [aria-haspopup="menu"]:active { background: rgb(0 0 0 / 15%); }
+.luna-account-network { text-shadow: 0 1px 2px rgb(0 0 0 / 40%); }
+.luna-account-chip {
+  position: relative;
+  flex-shrink: 0;
+  width: 48px;
+  height: 36px;
+  overflow: hidden;
+  border: 1px solid var(--account-gold-line);
+  border-radius: 7px;
+  background: linear-gradient(130deg, var(--account-gold-light), var(--account-gold-deep) 48%, var(--account-gold-light));
+  box-shadow: inset 0 1px 1px rgb(255 255 255 / 70%), 0 1px 3px rgb(0 0 0 / 30%);
+}
+.luna-account-chip::before,
+.luna-account-chip::after {
+  content: "";
+  position: absolute;
+  inset: 32% 0 auto;
+  height: 1px;
+  background: var(--account-gold-line);
+}
+.luna-account-chip::after { top: 66%; }
+.luna-account-chip > span {
+  position: absolute;
+  z-index: 1;
+  inset: 2px 16px;
+  border: 1px solid var(--account-gold-line);
+  border-radius: 50%;
+  background: linear-gradient(120deg, var(--account-gold-light), var(--account-gold-deep));
+}
+.luna-account-number,
+.luna-account-balance {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 -1px 0 rgb(255 255 255 / 45%), 0 2px 1px rgb(0 0 0 / 70%), 1px 0 1px rgb(0 0 0 / 25%) !important;
+}
+.luna-account-number { font-size: clamp(16px, 2.3vw, 24px); letter-spacing: .08em; }
+.luna-account-balance { font-size: clamp(22px, 2.3vw, 28px); line-height: 1.2; overflow-wrap: anywhere; }
+.luna-account-utilization { background: rgb(0 0 0 / 25%); }
+.luna-account-utilization > div { background: var(--account-ink); }
+
+@media (max-width: 480px) {
+  .luna-account-card { padding: 16px; gap: 8px; }
+  .luna-account-number { font-size: 16px; }
+}
+@media (forced-colors: active) {
+  .luna-account-watermark { display: none; }
+  .luna-account-utilization > div { background: Highlight; }
+}
