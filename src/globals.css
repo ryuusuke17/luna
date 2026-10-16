@@ -159,8 +159,8 @@
  --calendar-text: hsl(var(--card-foreground));
  --calendar-today: #175cd3;
  --calendar-on-today: #ffffff;
- --calendar-bills: #945600;
- --calendar-statements: #b42318;
+ --calendar-bills: #c45c00;
+ --calendar-statements: #d92d20;
  --calendar-goals: #147343;
  --calendar-marker-surface: #ffffff;
  --calendar-selection: #182230;
@@ -187,7 +187,7 @@
 .dashboard-calendar .calendar-marker-bills { background:var(--calendar-bills); }
 .dashboard-calendar .calendar-marker-statements { background:var(--calendar-statements); }
 .dashboard-calendar .calendar-marker-goals { background:var(--calendar-goals); }
-.dashboard-calendar .calendar-today-key { width:12px; height:12px; flex-shrink:0; border-radius:var(--radius-xs); background:var(--calendar-today); }
+.dashboard-calendar .calendar-today-key { background:var(--calendar-today); }
 .dashboard-calendar .calendar-error { color:var(--calendar-error); }
 @media (forced-colors:active) {
  .dashboard-calendar .calendar-day[aria-current=date] { border:2px solid Highlight; }

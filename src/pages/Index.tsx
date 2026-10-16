@@ -66,10 +66,6 @@ export default function Index(){
    <section className="panel dashboard-calendar" aria-labelledby="dashboard-calendar-title">
     <p className="eyebrow mb-2">What's ahead</p><h2 id="dashboard-calendar-title">Calendar</h2>
     <p className="mt-2 text-sm text-muted-foreground">Select a date to see bills, statement dues, goal targets.</p>
-    <ul className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-xs" aria-label="Calendar legend">
-     <li className="flex items-center gap-2"><span className="calendar-today-key" aria-hidden/>Today</li>
-     {sources.map(source=><li key={source.key} className="flex items-center gap-2"><span className={`calendar-marker calendar-marker-${source.key}`} aria-hidden/>{source.label}</li>)}
-    </ul>
     <div className="mt-3 space-y-2 text-xs">
      {sources.map(({key,label,query})=><div key={key}>
       {query.isFetching||query.isPending?<p role="status">{query.data?`Updating ${label}…`:`Loading ${label}…`}</p>:null}
@@ -88,6 +84,10 @@ export default function Index(){
       </button>;
      })}
     </div>
+    <ul className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-xs" aria-label="Calendar legend">
+     <li className="flex items-center gap-2"><span className="calendar-marker calendar-today-key" aria-hidden/>Today</li>
+     {sources.map(source=><li key={source.key} className="flex items-center gap-2"><span className={`calendar-marker calendar-marker-${source.key}`} aria-hidden/>{source.label}</li>)}
+    </ul>
     <p className="sr-only" role="status" aria-atomic="true">{day?`${new Date(`${day}T12:00:00`).toLocaleDateString("en-PH",{dateStyle:"full"})}. ${sources.map(s=>`${s.label}: ${s.count}${s.query.error?", unavailable":s.query.isFetching||s.query.isPending?", loading":""}`).join(". ")}.`:"Select a date."}</p>
     <div className="mt-4 min-w-0 border-t pt-4 text-sm">
      {day?<>
