@@ -76,15 +76,15 @@ export default function Index(){
       {query.error&&<div role="alert" className="calendar-error"><p>{label} unavailable: {query.error.message}{query.data?" Showing previously loaded records.":""}</p><Button variant="outline" className="mt-2 min-h-11 max-w-full whitespace-normal" disabled={query.isFetching} aria-busy={query.isFetching} onClick={()=>query.refetch()}>Retry {label}</Button></div>}
      </div>)}
     </div>
-    <div className="mt-5 grid grid-cols-7 gap-1" role="group" aria-label={`${new Date(`${month}-01T12:00:00`).toLocaleDateString("en-PH",{month:"long",year:"numeric"})} dates`}>
-     {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map(d=><span key={d} className="pb-2 text-center text-xs text-muted-foreground" aria-hidden>{d}</span>)}
+    <div className="mt-5 grid grid-cols-7 gap-x-1 gap-y-2 p-1" role="group" aria-label={`${new Date(`${month}-01T12:00:00`).toLocaleDateString("en-PH",{month:"long",year:"numeric"})} dates`}>
+     {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map(d=><span key={d} className="py-2 text-center text-xs text-muted-foreground" aria-hidden>{d}</span>)}
      {Array.from({length:offset},(_,i)=><span key={`blank-${i}`} aria-hidden/>)}
      {Array.from({length:days},(_,i)=>{
       const date=`${month}-${String(i+1).padStart(2,"0")}`,events=calendar[date];
       const counts=[events?.bills.length??0,events?.statements.length??0,events?.goals.length??0];
       const label=sources.map((source,index)=>`${source.label}: ${counts[index]}${source.query.error?", unavailable; count may be incomplete":source.query.isFetching||source.query.isPending?", loading; count may be incomplete":""}`).join("; ");
-      return <button type="button" key={date} aria-current={date===today?"date":undefined} aria-pressed={day===date} aria-label={`${new Date(`${date}T12:00:00`).toLocaleDateString("en-PH",{dateStyle:"full"})}${date===today?", Today":""}; ${label}; ${day===date?"selected":"not selected"}`} className="calendar-day relative flex min-h-11 min-w-0 flex-col items-center justify-center rounded-md px-0 py-2 text-center text-sm" onClick={()=>setDay(date)}>
-       <span>{i+1}</span><span className="mt-1 flex h-2 items-center justify-center gap-0.5" aria-hidden>{sources.map((source,index)=>counts[index]>0?<span key={source.key} className={`calendar-marker calendar-marker-${source.key}`}/>:null)}</span>
+      return <button type="button" key={date} data-has-events={counts.some(count=>count>0)?"true":undefined} aria-current={date===today?"date":undefined} aria-pressed={day===date} aria-label={`${new Date(`${date}T12:00:00`).toLocaleDateString("en-PH",{dateStyle:"full"})}${date===today?", Today":""}; ${label}; ${day===date?"selected":"not selected"}`} className="calendar-day relative grid h-12 w-full min-w-0 place-items-center rounded-md border border-transparent p-0 text-center text-sm" onClick={()=>setDay(date)}>
+       <span>{i+1}</span><span className="absolute inset-x-0 bottom-1 flex h-2 items-center justify-center gap-0.5" aria-hidden>{sources.map((source,index)=>counts[index]>0?<span key={source.key} className={`calendar-marker calendar-marker-${source.key}`}/>:null)}</span>
       </button>;
      })}
     </div>

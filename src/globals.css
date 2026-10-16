@@ -173,11 +173,13 @@
 }
 .dashboard-calendar a { overflow-wrap:anywhere; }
 .dashboard-calendar .calendar-day { background:var(--calendar-surface); color:var(--calendar-text); touch-action:manipulation; }
+.dashboard-calendar .calendar-day[data-has-events=true] { border-color:var(--calendar-selection); }
 .dashboard-calendar .calendar-day:not(:disabled):hover { background:var(--calendar-hover); }
 .dashboard-calendar .calendar-day:not(:disabled):active { background:var(--calendar-active); }
 .dashboard-calendar .calendar-day[aria-current=date],
 .dashboard-calendar .calendar-day[aria-current=date]:hover,
 .dashboard-calendar .calendar-day[aria-current=date]:active { background:var(--calendar-today); color:var(--calendar-on-today); }
+.dashboard-calendar .calendar-day:where([aria-current=date])[data-has-events=true] { border-color:var(--calendar-on-today); box-shadow:0 0 0 1px var(--calendar-today); }
 .dashboard-calendar .calendar-day[aria-pressed=true] { box-shadow:0 0 0 2px var(--calendar-selection); }
 .dashboard-calendar :focus-visible { outline:3px solid var(--calendar-focus)!important; outline-offset:4px!important; }
 .dashboard-calendar button:disabled { opacity:1; color:hsl(var(--muted-foreground)); cursor:not-allowed; }
