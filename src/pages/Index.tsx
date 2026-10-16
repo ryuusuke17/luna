@@ -84,7 +84,7 @@ export default function Index(){
       </button>;
      })}
     </div>
-    <ul className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-xs" aria-label="Calendar legend">
+    <ul className="mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs" aria-label="Calendar legend">
      <li className="flex items-center gap-2"><span className="calendar-marker calendar-today-key" aria-hidden/>Today</li>
      {sources.map(source=><li key={source.key} className="flex items-center gap-2"><span className={`calendar-marker calendar-marker-${source.key}`} aria-hidden/>{source.label}</li>)}
     </ul>
