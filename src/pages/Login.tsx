@@ -1,6 +1,6 @@
 import {useState} from "react";
 import {useNavigate} from "react-router-dom";
-import {ArrowUpRight,LockKeyhole} from "lucide-react";
+import {ArrowUpRight} from "lucide-react";
 import LunaLogo from "@/components/LunaLogo";
 import {send} from "@/lib/api";
 
@@ -14,13 +14,10 @@ export default function Login(){
     <p className="mb-6 hidden text-xs font-semibold uppercase tracking-[.2em] text-white/65 lg:block">Your money. Your perspective.</p>
     <h1 className="login-display">A clearer view.<br/><span className="text-white/55">A little more<br className="hidden lg:block"/> freedom.</span></h1>
     <p className="mt-8 hidden max-w-sm text-base leading-relaxed text-white/70 lg:block">Know where you stand. Make space for what comes next. Your private finance workspace, all in one place.</p>
-    <div className="mt-12 hidden w-fit items-center gap-3 rounded-full border border-white/25 px-5 py-3 text-sm text-white/80 lg:flex"><span className="size-2 rounded-full bg-[#494fdf]" aria-hidden/>Built around your money story</div>
    </div>
-   <div className="hidden flex-wrap items-center justify-between gap-4 border-t border-white/15 pt-5 text-xs text-white/65 lg:flex"><span className="inline-flex items-center gap-2"><LockKeyhole size={14} aria-hidden/>Your finances stay on your server.</span><span>PHP · Personal finance</span></div>
   </section>
   <section className="flex flex-col justify-center px-6 py-12 sm:px-12 lg:p-16">
    <form aria-busy={busy} onSubmit={submit} className="mx-auto w-full max-w-sm">
-    <p className="eyebrow mb-4">Your private workspace</p>
     <h2 className="text-4xl font-medium tracking-tight">{setup?"Make it yours.":"Welcome back."}</h2>
     <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{setup?"Create your owner account to get started with Luna.":"Your next chapter starts with a clearer picture. Sign in to Luna."}</p>
     <fieldset disabled={busy} className="contents">
@@ -32,7 +29,6 @@ export default function Login(){
     {busy&&<p role="status" className="mt-4 text-sm text-muted-foreground">{setup?"Creating your owner account and signing in…":"Signing in to your workspace…"}</p>}
     <button disabled={busy} aria-busy={busy} className="action mt-7 w-full">{busy?setup?"Creating account…":"Signing in…":setup?"Create account":"Sign in"}<ArrowUpRight size={18} aria-hidden/></button>
     <button disabled={busy} type="button" onClick={()=>{setSetup(!setup);setError("")}} className="mt-5 min-h-12 w-full rounded-full px-3 text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground">{setup?"I already have an account":"First time here? Set up owner account"}</button>
-    <p className="mt-9 border-t pt-5 text-xs leading-relaxed text-muted-foreground">A personal record, not a bank connection. Luna never moves your money.</p>
    </form>
   </section>
  </main>;
