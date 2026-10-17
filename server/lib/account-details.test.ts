@@ -48,6 +48,22 @@ test("period summaries include incoming/outgoing transfers, exclude voids, ignor
   assert.deepEqual(accountDetails(owner,account,{month:"2025-02",search:"no match",page:"3"})!.period,result.period);
   assert.equal(accountDetails(owner,account,{tab:"activity"})!.period.month,"2025-02");
 });
+test("summary cards use cash/wallet ledger only and signed currency-separated credit-card snapshots",async()=>{
+ const {accountSummary}=await import("../../src/lib/accounts.ts");
+ const base={id:1,name:"Summary fixture",balance:100,opening_date:"2026-01-01"};
+ const statement=(snapshots:AccountSnapshot[])=>({count:1,date:"2026-04-30",source:"statement" as const,snapshots,reason:null});
+ const result=accountSummary([
+  {...base,type:"cash",balance:1000},{...base,type:"wallet",balance:-100},
+  {...base,type:"bank",balance:999999},{...base,type:"loan",balance:-999999},
+  {...base,type:"credit_card",balance:-999999,display:statement([snapshot({amount:500}),snapshot({currency:"USD",amount:200})])},
+  {...base,type:"credit_card",display:statement([snapshot({amount:-100})])},
+  {...base,type:"credit_card",display:statement([snapshot({amount:50,semantics:"asset-positive"})])},
+  {...base,type:"credit_card",display:statement([snapshot({currency:"JPY",amount:0})])},
+  {...base,type:"credit_card",balance:-999999},
+ ]);
+ assert.deepEqual(result,{cashWallet:900,statementBalances:[["JPY",0],["PHP",350],["USD",200]],missingStatements:1});
+ assert.deepEqual(accountSummary([]),{cashWallet:0,statementBalances:[],missingStatements:0});
+});
 test("account reset requires fresh confirmation, removes owned history/files, preserves foreign records and unlinked archives",async()=>{
  const {accountResetPreview,resetAccounts}=await import("./account-reset.ts");
  const {mkdtempSync,mkdirSync,writeFileSync,existsSync,rmSync}=await import("node:fs");

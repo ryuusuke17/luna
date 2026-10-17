@@ -16,6 +16,21 @@ export type AccountDetail = {
   account: Account; history: { items: AccountSnapshot[]; total: number; page: number; pageSize: number };
   period: { month: string | null; start: string | null; end: string | null; opening: number; closing: number; inflows: number; outflows: number };
 };
+export function accountSummary(accounts: Account[]) {
+  const currencies = new Map<string, number>();
+  let cashWallet = 0, missingStatements = 0;
+  for (const account of accounts) {
+    if (account.type === "cash" || account.type === "wallet") cashWallet += account.balance;
+    if (account.type !== "credit_card") continue;
+    const snapshots = account.display?.source === "statement" ? account.display.snapshots.filter(s => s.amount !== null) : [];
+    if (!snapshots.length) missingStatements++;
+    for (const snapshot of snapshots) {
+      const debt = snapshot.semantics === "debt-positive" ? snapshot.amount! : -snapshot.amount!;
+      currencies.set(snapshot.currency, (currencies.get(snapshot.currency) ?? 0) + debt);
+    }
+  }
+  return { cashWallet, statementBalances: [...currencies].sort(([a], [b]) => a.localeCompare(b)), missingStatements };
+}
 export const accountLabels: Record<AccountType, string> = { credit_card: "Credit card", bank: "Debit card / bank", wallet: "E-wallet", cash: "Cash", loan: "Loan", asset: "Other asset", liability: "Other liability" };
 export const debtAccount = (type: string) => ["credit_card", "loan", "liability"].includes(type);
 // Preserve database property order for the existing optimistic-concurrency comparison.
