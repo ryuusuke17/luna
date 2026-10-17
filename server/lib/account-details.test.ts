@@ -48,4 +48,42 @@ test("period summaries include incoming/outgoing transfers, exclude voids, ignor
   assert.deepEqual(accountDetails(owner,account,{month:"2025-02",search:"no match",page:"3"})!.period,result.period);
   assert.equal(accountDetails(owner,account,{tab:"activity"})!.period.month,"2025-02");
 });
+test("account reset requires fresh confirmation, removes owned history/files, preserves foreign records and unlinked archives",async()=>{
+ const {accountResetPreview,resetAccounts}=await import("./account-reset.ts");
+ const {mkdtempSync,mkdirSync,writeFileSync,existsSync,rmSync}=await import("node:fs");
+ const {join}=await import("node:path"),{tmpdir}=await import("node:os");
+ const root=mkdtempSync(join(tmpdir(),"account-reset-")),originalPath=process.env.LUNA_STATEMENTS_PATH;
+ process.env.LUNA_STATEMENTS_PATH=root;mkdirSync(join(root,"archive-only"));
+ try{
+  const user=Number(db.prepare("INSERT INTO users(username,password_hash) VALUES('reset-fixture','hash')").run().lastInsertRowid);
+  const bank=Number(db.prepare("INSERT INTO accounts(owner_id,name,type,opening_date) VALUES(?,'Reset bank','bank','2026-01-01')").run(user).lastInsertRowid);
+  createTransaction(user,{kind:"opening",accountId:bank,date:"2026-01-01",amount:1000,idempotencyKey:"reset-opening"});
+  db.prepare("INSERT INTO goals(owner_id,name,target) VALUES(?,'Keep goal',100)").run(user);
+  const key="00000000-0000-0000-0000-000000000001.csv",unlinkedKey="00000000-0000-0000-0000-000000000002.csv",bankKey="00000000-0000-0000-0000-000000000003.csv";
+  const insertArchive=db.prepare("INSERT INTO statement_archives(owner_id,account_id,filename,file_key,file_hash,size,parser_version,summary_json,raw_summary_json,rows_json,warnings_json) VALUES(?,?,'source.csv',?,?,1,'test','{}','[]','[]','[]')");
+  insertArchive.run(user,bank,key,'linked');insertArchive.run(user,null,unlinkedKey,'unlinked');
+  writeFileSync(join(root,'archive-only',key),'linked');writeFileSync(join(root,'archive-only',unlinkedKey),'unlinked');writeFileSync(join(root,bankKey),'bank');
+  const statement=Number(db.prepare("INSERT INTO statements(owner_id,account_id,filename,file_key,file_hash,size,status) VALUES(?,?,'bank.csv',?,'bank',4,'ready_for_review')").run(user,bank,bankKey).lastInsertRowid);
+  db.prepare("INSERT INTO statement_entries(statement_id,row_index,raw_json) VALUES(?,1,'{}')").run(statement);
+  const foreignBefore=JSON.stringify(db.prepare("SELECT * FROM accounts WHERE owner_id=?").all(owner));
+  const preview=accountResetPreview(user);
+  assert.throws(()=>resetAccounts(user,{version:preview.version,confirmation:'wrong'}));
+  db.prepare("UPDATE accounts SET name='Changed bank' WHERE id=?").run(bank);
+  assert.throws(()=>resetAccounts(user,{version:preview.version,confirmation:'DELETE ALL ACCOUNTS'}));
+  const current=accountResetPreview(user);
+  db.exec("CREATE TRIGGER reset_failure BEFORE DELETE ON accounts WHEN OLD.name='Changed bank' BEGIN SELECT RAISE(ABORT,'fixture rollback'); END");
+  assert.throws(()=>resetAccounts(user,{version:current.version,confirmation:'DELETE ALL ACCOUNTS'}));
+  assert.ok(existsSync(join(root,bankKey)));assert.ok(existsSync(join(root,'archive-only',key)));
+  assert.equal(accountResetPreview(user).version,current.version);db.exec('DROP TRIGGER reset_failure');
+  assert.equal(resetAccounts(user,{version:current.version,confirmation:'DELETE ALL ACCOUNTS'}).ok,true);
+  assert.equal(accountResetPreview(user).counts.accounts,0);assert.equal(accountResetPreview(user).counts.transactions,0);
+  assert.equal(accountResetPreview(user).counts.statements,0);assert.equal(accountResetPreview(user).counts.statement_entries,0);
+  assert.equal(existsSync(join(root,bankKey)),false);assert.equal(existsSync(join(root,'archive-only',key)),false);
+  assert.ok(existsSync(join(root,'archive-only',unlinkedKey)));
+  assert.equal((db.prepare('SELECT COUNT(*) n FROM statement_archives WHERE owner_id=?').get(user) as {n:number}).n,1);
+  assert.equal((db.prepare('SELECT COUNT(*) n FROM goals WHERE owner_id=?').get(user) as {n:number}).n,1);
+  assert.equal(JSON.stringify(db.prepare('SELECT * FROM accounts WHERE owner_id=?').all(owner)),foreignBefore);
+  assert.deepEqual(db.pragma('foreign_key_check'),[]);
+ }finally{if(originalPath===undefined)delete process.env.LUNA_STATEMENTS_PATH;else process.env.LUNA_STATEMENTS_PATH=originalPath;rmSync(root,{recursive:true,force:true});}
+});
 test.after(()=>db.close());
