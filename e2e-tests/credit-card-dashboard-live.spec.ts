@@ -47,5 +47,5 @@ test("issued-statement importer to dashboard: full fixture, no ledger changes, r
  const missing=await get(`credit-card-dashboard?month=2026-04&cards=${second.id}`);expect(missing.metrics).toEqual([]);expect(missing.cards[0].selectedMonth).toBeNull();
  expect((await request.post("/api/credit-card-statements",{data:{}})).status()).toBe(403);
  const anonymous=await page.context().browser()!.newContext({baseURL});expect((await anonymous.request.get("/api/credit-card-dashboard")).status()).toBe(401);expect((await anonymous.request.get(`/api/credit-card-statements/${id}/download`)).status()).toBe(401);await anonymous.close();
- expect(await get("accounts")).toEqual(baseline.accounts);expect(await get("transactions?page=1&period=all")).toEqual(baseline.transactions);
+ expect((await get("accounts")).map(({display,...record}:Record<string,unknown>)=>record)).toEqual(baseline.accounts.map(({display,...record}:Record<string,unknown>)=>record));expect(await get("transactions?page=1&period=all")).toEqual(baseline.transactions);
 });

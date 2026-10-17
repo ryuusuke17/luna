@@ -19,6 +19,7 @@ async function workspace(page:Page){
   if(path==="auth/me")result={user:{id:1,username:"Layout fixture"}};
   else if(path==="preferences")result={shortcuts:1,default_transaction_currency:"PHP"};
   else if(path==="accounts")result=accounts;
+  else if(path==="accounts/1")result={account:accounts[0],history:{items:[],total:0,page:1,pageSize:25},period:{month:null,start:null,end:null,opening:0,closing:150000,inflows:150000,outflows:0}};
   else if(path==="categories")result=[{id:1,name:"Food",kind:"expense"}];
   else if(path==="transactions")result=url.searchParams.has("page")?{items:[transaction],total:1,pageSize:20}:[transaction];
   else if(path==="budgets")result=[{id:1,name:"Food plan",month,category_id:1,amount:25000,actual:10000,category_name:"Food",kind:"expense"}];
@@ -47,7 +48,7 @@ test("contextual actions stay unique across client navigation; drafts survive sa
  }
  await page.getByRole("link",{name:"Accounts",exact:true}).click();await page.getByRole("button",{name:"Add account",exact:true}).click();
  await expect(page.getByRole("heading",{name:"New account",exact:true})).toBeVisible();
- await page.getByRole("button",{name:"Close account form",exact:true}).click();
+ await page.getByRole("dialog").getByRole("button",{name:"Cancel",exact:true}).click();
  await page.getByRole("link",{name:"Goals",exact:true}).click();await page.getByRole("button",{name:"Create goal",exact:true}).click();
  const dialog=page.getByRole("dialog");await dialog.getByLabel("Goal name").fill("Retained draft");await dialog.getByLabel("Target · PHP").fill("5000");
  state.failSaves();await dialog.getByRole("button",{name:"Save goal",exact:true}).click();await expect(dialog.getByRole("alert")).toHaveText("Luna could not save goals. Check the entered values and selections, then try again.");await expect(dialog.getByLabel("Goal name")).toHaveValue("Retained draft");
@@ -72,7 +73,7 @@ test("mobile search, slash shortcut and drawer transaction shortcut retain focus
  const search=page.getByRole("dialog",{name:"Search workspace"}),input=search.getByRole("combobox");await expect(input).toBeFocused();await input.fill("bank");
  await expect(search.getByRole("option",{name:/Daily bank/})).toBeVisible();await reviewFocusLoop(page,search);await page.keyboard.press("Escape");await expect(search).not.toBeVisible();await expect(trigger).toBeFocused();
  await page.keyboard.press("/");await expect(input).toBeFocused();await input.fill("bank");await page.keyboard.press("ArrowDown");await page.keyboard.press("Enter");
- await expect(page).toHaveURL(/accounts\?id=1/);await expect(page.getByRole("region",{name:"Daily bank account details"})).toBeFocused();
+ await expect(page).toHaveURL(/accounts\/1/);await expect(page.getByRole("heading",{name:"Daily bank",exact:true})).toBeFocused();
  await page.getByRole("button",{name:"Open navigation"}).click();await page.getByRole("dialog",{name:"Luna navigation"}).getByRole("button",{name:"Add transaction",exact:true}).click();
  const transaction=page.getByRole("dialog");await expect(transaction.getByLabel("Full amount · PHP")).toBeVisible();await reviewFocusLoop(page,transaction);await page.keyboard.press("Escape");expect(state.writes).toHaveLength(0);expect(state.errors).toEqual([]);
 });

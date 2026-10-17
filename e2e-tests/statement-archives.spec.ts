@@ -86,8 +86,8 @@ test("standalone Statements, Import & Export and clean ledger (authenticated iso
  const linked=await(await request.get("/api/statement-archives/"+id)).json();expect(linked.account_id).toBe(account.id);expect(linked.version).not.toBe(saved.version);
  const stale=await request.patch("/api/statement-archives/"+id,{headers,data:{accountId:null,version:saved.version}});expect(stale.ok()).toBe(false);
  const repeated=await post("statement-archives",{filename:"renamed.csv",mime:"text/csv",base64:Buffer.from(sample).toString("base64"),accountId:null});expect(repeated.id).toBe(Number(id));expect(repeated.duplicate).toBe(true);expect(repeated.accountMismatch).toBe(true);expect(repeated.account_id).toBe(account.id);
- await detail.getByRole("link",{name:"View account details",exact:true}).click();await expect(page.getByRole("region",{name:"Statement reference "+stamp+" account details",exact:true})).toBeVisible();
- await page.getByRole("link",{name:"View statements",exact:true}).click();await expect(page).toHaveURL(new RegExp("statements\\?account="+account.id));
+ await detail.getByRole("link",{name:"View account details",exact:true}).click();await expect(page.getByRole("heading",{name:"Statement reference "+stamp,exact:true})).toBeVisible();
+ await page.getByRole("tab",{name:"Statements",exact:true}).click();await expect(page).toHaveURL(new RegExp("accounts/"+account.id));await page.goBack();
  await page.getByRole("button",{name:"View statement "+id,exact:true}).click();await expect(detail).toBeFocused();
  await detail.getByRole("combobox",{name:"Reference account",exact:true}).selectOption("");await detail.getByRole("button",{name:"Save account link",exact:true}).click();await expect.poll(async()=> (await(await request.get("/api/statement-archives/"+id)).json()).account_id).toBeNull();
  await page.getByRole("combobox",{name:"Linked account",exact:true}).selectOption("unlinked");await expect(page.getByRole("button",{name:"View statement "+id,exact:true})).toBeVisible();

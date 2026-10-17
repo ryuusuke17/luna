@@ -6,9 +6,9 @@ import {api,send} from "@/lib/api";
 import {formatMoney,supportedCurrencies,currencyDigits} from "@/lib/finance";
 import {cardLabel,type ImportResult,type StatementDashboard} from "@/lib/credit-card-statements";
 
-export default function CreditCardStatementImporter(){
+export default function CreditCardStatementImporter({initialAccount}:{initialAccount?:string}){
  const client=useQueryClient(),cards=useQuery({queryKey:["credit-card-statements","cards"],queryFn:()=>api<StatementDashboard>("credit-card-statements")});
- const [file,setFile]=useState<File|null>(null),[cardId,setCardId]=useState(""),[issuer,setIssuer]=useState(""),[currency,setCurrency]=useState(""),[base64,setBase64]=useState(""),[result,setResult]=useState<ImportResult|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(""),[ack,setAck]=useState(false),[note,setNote]=useState(""),[revision,setRevision]=useState(""),[completed,setCompleted]=useState(false);
+ const [file,setFile]=useState<File|null>(null),[cardId,setCardId]=useState(initialAccount??""),[issuer,setIssuer]=useState(""),[currency,setCurrency]=useState(""),[base64,setBase64]=useState(""),[result,setResult]=useState<ImportResult|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(""),[ack,setAck]=useState(false),[note,setNote]=useState(""),[revision,setRevision]=useState(""),[completed,setCompleted]=useState(false);
  function reset(){setResult(null);setBase64("");setAck(false);setNote("");setRevision("");setCompleted(false);setError("");}
  async function preview(event:React.FormEvent){
   event.preventDefault();if(!file||busy)return;setError("");setBusy(true);
@@ -20,7 +20,7 @@ export default function CreditCardStatementImporter(){
  }
  async function confirm(){
   if(!file||busy)return;setBusy(true);setError("");
-  try{const response=await send<ImportResult>("credit-card-statements",{filename:file.name,base64,cardId:Number(cardId),currency,confirm:true,acknowledge:ack,reviewNote:note,...(revision==="additional"?{allowAdditional:true}:revision?{supersedesId:Number(revision)}:{})});setResult(response);setCompleted(true);await client.invalidateQueries({queryKey:["credit-card-statements"]});}
+  try{const response=await send<ImportResult>("credit-card-statements",{filename:file.name,base64,cardId:Number(cardId),currency,confirm:true,acknowledge:ack,reviewNote:note,...(revision==="additional"?{allowAdditional:true}:revision?{supersedesId:Number(revision)}:{})});setResult(response);setCompleted(true);await client.invalidateQueries();}
   catch(reason){setError((reason as Error).message);}finally{setBusy(false);}
  }
  const p=result?.preview;

@@ -42,7 +42,14 @@
 }
 
 .luna-account-card > :not(.luna-account-watermark) { flex-shrink: 0; }
+.luna-account-card { overflow-wrap: anywhere; background: var(--account-blue-deep); }
 .luna-account-card p { text-shadow: 0 1px 2px rgb(0 0 0 / 65%); }
+.luna-account-title::after { content: ""; position: absolute; inset: 0; z-index: 10; border-radius: 20px; }
+.luna-account-title:hover::after { background: rgb(255 255 255 / 5%); }
+.luna-account-title:active::after { background: rgb(0 0 0 / 12%); }
+.luna-account-title:focus-visible { outline: none; }
+.luna-account-title:focus-visible::after { outline: 3px solid var(--account-ink); outline-offset: 3px; }
+.luna-account-card [aria-haspopup="menu"]:focus-visible { outline: 3px solid var(--account-ink); outline-offset: 2px; }
 .luna-account-watermark {
   position: absolute;
   z-index: -1;
