@@ -47,6 +47,18 @@ export default function TransactionImports({batch,account,onSelectBatch,onLegacy
     <div className="min-w-0 basis-full sm:flex-1"><p className="break-words font-medium">{item.filename}</p><p className="text-sm text-muted-foreground">{item.account_name} - {item.created_at} - {item.imported} imported, {item.matched} linked, {item.skipped??0} skipped, {item.needs_review} need attention{item.status==="failed"?" - File could not be parsed":""}</p></div>
     <div className="flex flex-wrap gap-3"><Button variant="outline" onClick={()=>onSelectBatch(item.id,item.account_id)}>View upload #{item.id}</Button><a className="quiet inline-flex min-h-11 items-center" href={`/api/statements/${item.id}/download`} download>Download original</a><RemoveStatementDialog id={item.id} filename={item.filename} disabled={busy||history.isFetching} onRemoved={()=>{onRemoved(item.id);onStatus("Uploaded statement removed. Ledger transactions unchanged.");void client.invalidateQueries({queryKey:["account-detail"]});requestAnimationFrame(()=>document.getElementById("import-result")?.focus());}}/></div>
    </li>)}</ul>}
+   <div className="pt-3 border-t border-border mt-3">
+    <Button variant="destructive" size="sm" disabled={busy} onClick={async()=>{
+     if(!window.confirm("Warning: Force purge all statement imports and staged rows from the database?"))return;
+     setBusy(true);setError("");
+     try{
+      await send("maintenance/purge-imports",{confirm:"PURGE_ALL_IMPORTS"});
+      await client.invalidateQueries();
+      onStatus("All statement imports purged from database.");
+     }catch(err){setError((err as Error).message);}
+     finally{setBusy(false);}
+    }}>Force purge all statement imports</Button>
+   </div>
    {!attention&&legacy.data?.some(item=>!account||item.account_id===Number(account))&&<details className="mt-4"><summary className="min-h-11 cursor-pointer">Earlier CSV / JSON imports</summary><ul>{legacy.data.filter(item=>!account||item.account_id===Number(account)).map(item=><li key={`${item.format}-${item.id}`} className="flex flex-wrap items-center justify-between gap-3 py-3"><span>{item.account_name} - {item.format.toUpperCase()} #{item.id} - {item.rows} rows</span><Button variant="outline" onClick={()=>onLegacy(item.format,item.id,item.account_id)}>View transactions</Button></li>)}</ul><p className="text-sm text-muted-foreground">Earlier imports did not retain downloadable original files.</p></details>}
   </details>
   {detail.isFetching&&<p role="status" className="mt-3">Loading upload...</p>}{detail.error&&<p role="alert" className="mt-3 text-destructive">{detail.error.message}</p>}
