@@ -140,7 +140,7 @@ test("account overview separates statement currencies, due details and ledger; m
  const header=page.locator("header[aria-label$='account details']"),php=header.getByLabel("Latest PHP statement",{exact:true}),usd=header.getByLabel("Latest USD statement",{exact:true});
  await expect(php).toContainText("₱1,250.00");await expect(php).toContainText("2026-05-20");await expect(php).toContainText("₱50.00");
  await expect(usd).toContainText(/25\.00/);await expect(usd.getByText("Not provided",{exact:true})).toHaveCount(2);
- await expect(header.getByLabel("Ledger reference",{exact:true})).toContainText("₱900.00");
+ await expect(header.getByLabel("Ledger reference",{exact:true})).toHaveCount(0);
  await expect(header.getByRole("meter")).toHaveAttribute("aria-valuenow","100");await expect(header.getByRole("meter")).toHaveAttribute("aria-valuetext",/125% utilized/);
  await expect(header.getByText("Over the recorded credit limit",{exact:true})).toBeVisible();
  for(const width of [320,640,1200]){await page.setViewportSize({width,height:800});await expect(php).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);}
@@ -155,7 +155,7 @@ test("missing statements never relabel ledger balances as statement values",asyn
  await page.goto("/accounts/1");
  const header=page.locator("header[aria-label$='account details']"),summary=header.getByLabel("Statement balance unavailable",{exact:true});
  await expect(summary.getByText("Not provided",{exact:true})).toHaveCount(3);await expect(summary).not.toContainText("₱100.00");
- await expect(header.getByLabel("Ledger reference",{exact:true})).toContainText("₱100.00");await expect(header.getByRole("meter")).toHaveAttribute("aria-valuenow","0");
+ await expect(header.getByLabel("Ledger reference",{exact:true})).toHaveCount(0);await expect(header.getByRole("meter")).toHaveAttribute("aria-valuenow","0");
  await expect(header.getByLabel("Credit utilization",{exact:true})).toContainText("Ledger · PHP");
  expect(state.errors).toEqual([]);
 });

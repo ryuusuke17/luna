@@ -2,7 +2,7 @@ import type { ReactNode, Ref } from "react";
 import { CalendarDays, FileText } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { AccountIdentity } from "@/components/AccountCard";
-import { accountLabels, debtAccount, utilization, type Account } from "@/lib/accounts";
+import { accountLabels, utilization, type Account } from "@/lib/accounts";
 import { formatMoney } from "@/lib/finance";
 
 const sourceLabels={issued:"Issued credit-card statement",bank:"Bank-statement upload",archive:"Legacy reference archive",historical:"Historical statement import"};
@@ -41,7 +41,6 @@ export default function AccountOverview({ account, headingRef, children }: { acc
         {usage?<><div className="flex flex-wrap items-baseline justify-between gap-2"><p className="text-2xl font-semibold tabular-nums">{Math.round(usage.percent)}%</p><p className="text-xs text-muted-foreground">{usage.source}</p></div><div className="h-3 overflow-hidden rounded-full border border-muted-foreground bg-muted forced-colors:border-[CanvasText]" role="meter" aria-label="Credit limit used" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} aria-valuetext={`${Math.round(usage.percent)}% utilized · ${usage.source} · Not live available credit`}><div className="h-full rounded-full bg-foreground forced-colors:bg-[Highlight] forced-colors:[forced-color-adjust:none]" style={{width:`${percent}%`}}/></div>{usage.percent>100&&<p className="text-sm font-medium">Over the recorded credit limit</p>}</>:<p className="text-sm text-muted-foreground">Unavailable · requires a credit limit and compatible PHP balance.</p>}
         <p className="text-xs text-muted-foreground">Recorded balance only. Not live available credit.</p>
       </Card>}
-      <Card className="min-w-0 p-4 shadow-none" aria-label="Ledger reference"><dl className="flex flex-wrap items-start justify-between gap-3"><div><dt className="text-xs text-muted-foreground">Ledger balance · PHP</dt><dd className="mt-1 break-words text-lg font-medium tabular-nums">{formatMoney(account.balance)}</dd></div>{debtAccount(account.type)&&<div><dt className="text-xs text-muted-foreground">Ledger debt · PHP</dt><dd className="mt-1 break-words text-lg font-medium tabular-nums">{formatMoney(Math.max(0,-account.balance))}</dd></div>}</dl><p className="mt-2 text-xs text-muted-foreground">Separate from statements.{debtAccount(account.type)?" Positive ledger balances represent credit, not debt.":""}</p></Card>
     </div>
   </header>;
 }
