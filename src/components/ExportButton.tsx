@@ -2,7 +2,7 @@ import {useState} from "react";
 import {Button} from "@/components/WorkspaceButton";
 import {downloadExport} from "@/lib/api";
 
-export default function ExportButton({format, children}: {format: "json" | "csv"; children: React.ReactNode}) {
+export default function ExportButton({format, children, size}: {format: "json" | "csv"; children: React.ReactNode; size?: "default" | "sm" | "lg" | "icon"}) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
@@ -13,5 +13,5 @@ export default function ExportButton({format, children}: {format: "json" | "csv"
     catch(e) {setError(e instanceof Error ? e.message : "Luna could not download this export. Try again.");}
     finally {setBusy(false);}
   }
-  return <div className="space-y-2"><Button variant="outline" className="min-h-11" disabled={busy} aria-busy={busy} onClick={download}>{busy ? "Preparing export…" : children}</Button>{error && <p role="alert" className="max-w-sm text-sm text-destructive">{error}</p>}{status && <p role="status" className="max-w-sm text-sm text-muted-foreground">{status}</p>}</div>;
+  return <div className="space-y-1"><Button variant="outline" size={size} className={size==="sm"?"":"min-h-11"} disabled={busy} aria-busy={busy} onClick={download}>{busy ? "Preparing export…" : children}</Button>{error && <p role="alert" className="max-w-sm text-xs text-destructive">{error}</p>}{status && <p role="status" className="max-w-sm text-xs text-muted-foreground">{status}</p>}</div>;
 }

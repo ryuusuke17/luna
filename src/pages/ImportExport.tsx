@@ -45,7 +45,15 @@ export default function ImportExport(){
      <LegacyStatementArchives key={`${account}:${params.get("archive")??""}`} account={account||undefined} initialId={params.has("archive")?Number(params.get("archive")):undefined}/>
     </section>
    </TabsContent>
-   <TabsContent value="export"><section className="panel max-w-3xl space-y-5"><h2>Export your records</h2><p>Exports contain all your owned records in their current supported format, not only the transactions currently filtered on screen.</p><div className="flex flex-wrap gap-3"><ExportButton format="csv">Export all transactions</ExportButton><ExportButton format="json">Export workspace records</ExportButton></div><p className="text-sm text-muted-foreground">CSV contains posted transactions, including uncategorized records. Workspace JSON includes financial, planning, and configuration records. Neither includes private originals or the standalone statement archive, and neither is an automatic restore format. Download statement originals from Statements. Exports are not encrypted; keep them private.</p></section></TabsContent>
+   <TabsContent value="export"><section className="panel mt-2 w-full p-3 sm:p-4 text-sm space-y-3">
+    <h2 className="text-base font-semibold leading-none">Export your records</h2>
+    <p className="text-xs text-muted-foreground">Exports contain all your owned records in their current supported format, not only the transactions currently filtered on screen.</p>
+    <div className="flex flex-wrap gap-2 pt-1">
+     <ExportButton format="csv" size="sm">Export all transactions</ExportButton>
+     <ExportButton format="json" size="sm">Export workspace records</ExportButton>
+    </div>
+    <p className="text-xs text-muted-foreground">CSV contains posted transactions, including uncategorized records. Workspace JSON includes financial, planning, and configuration records. Neither includes private originals or the standalone statement archive, and neither is an automatic restore format. Download statement originals from Statements. Exports are not encrypted; keep them private.</p>
+   </section></TabsContent>
   </Tabs>
  </>;
 }
