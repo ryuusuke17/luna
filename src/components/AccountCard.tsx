@@ -20,7 +20,7 @@ export default function AccountCard({ account }: { account: Account }) {
     {isCard&&account.last4&&<p className="luna-account-number flex flex-wrap gap-x-2" aria-label={`Card ending in ${account.last4}`}><span aria-hidden>{account.type==="credit_card"?"•••• •••• ••••":"••••"}</span><span aria-hidden>{account.last4}</span></p>}
     <div className="mt-auto flex min-w-0 flex-wrap items-end gap-3">
       <div className="min-w-0 flex-1 basis-40"><p className="text-xs">{balanceCaption(account.display)}</p>
-        {account.display?.source==="statement"?account.display.snapshots.map(s=><div key={s.id}><p className="luna-account-balance mt-1">{formatMoney(s.amount!,s.currency)}</p><p className="text-xs">{s.semantics==="debt-positive"?(s.amount!<0?"Statement credit balance":"Statement debt balance"):"Statement closing balance"}</p></div>):<p className="luna-account-balance mt-1">{formatMoney(account.balance)}</p>}
+        {account.display?.source==="statement"?account.display.snapshots.map(s=><div key={s.id}><p className="luna-account-balance mt-1">{formatMoney(s.amount!,s.currency)}</p>{(s.semantics!=="debt-positive"||s.amount!<0)&&<p className="text-xs">{s.semantics==="debt-positive"?"Statement credit balance":"Statement closing balance"}</p>}</div>):<p className="luna-account-balance mt-1">{formatMoney(account.balance)}</p>}
       </div>
       {isCard&&account.network&&<span className="ml-auto flex h-10 max-w-full shrink-0 items-end justify-end">{network?<img src={network} alt={account.network} className="max-h-full w-16 object-contain object-right-bottom"/>:<span className="max-w-24 break-words text-right text-sm">{account.network}</span>}</span>}
     </div>
