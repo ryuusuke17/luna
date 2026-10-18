@@ -140,10 +140,10 @@ test("account overview separates statement currencies, due details and ledger; m
  await expect(usd).toContainText(/25\.00/);await expect(usd.getByText("Not provided",{exact:true})).toHaveCount(2);
  await expect(header.getByLabel("Ledger reference",{exact:true})).toHaveCount(0);
  await expect(header.getByRole("meter")).toHaveAttribute("aria-valuenow","90");await expect(header.getByRole("meter")).toHaveAttribute("aria-valuetext",/90% utilized/);
- await expect(header.getByLabel("Current recorded ledger balance",{exact:true})).toContainText("₱900.00");
+ await expect(header.getByLabel("Current recorded ledger balance",{exact:true})).toHaveCount(0);
  for(const width of [320,640,1200]){
   await page.setViewportSize({width,height:800});await expect(php).toBeVisible();
-  const balance=(await header.getByLabel("Current recorded ledger balance",{exact:true}).boundingBox())!,usage=(await header.getByLabel("Credit utilization",{exact:true}).boundingBox())!;
+  const balance=(await php.boundingBox())!,usage=(await header.getByLabel("Credit utilization",{exact:true}).boundingBox())!;
   if(width>=640){expect(Math.abs(balance.y-usage.y)).toBeLessThan(1);expect(Math.abs(balance.height-usage.height)).toBeLessThan(1);expect(usage.x).toBeGreaterThanOrEqual(balance.x+balance.width);}
   else expect(usage.y).toBeGreaterThanOrEqual(balance.y+balance.height);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);

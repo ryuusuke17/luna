@@ -33,8 +33,8 @@ test("shared statement IDs, explicit approval, locked account history and all-mo
  const detail=page.getByRole("region",{name:"Credit card statement detail",exact:true});await expect(detail).toBeFocused();
  await detail.getByText("Ledger review · row 14",{exact:true}).click();await expect(detail.getByText(/Unreviewed · reference-only/)).toBeVisible();
  await detail.getByRole("combobox",{name:"Review action",exact:true}).selectOption("import");await detail.getByRole("button",{name:"Confirm ledger review",exact:true}).click();await expect(detail.getByRole("link",{name:"Ledger transaction #101",exact:true})).toBeVisible();
- await detail.getByRole("link",{name:`Open account ${card.name}`,exact:true}).click();await expect(page.getByLabel("Current recorded ledger balance",{exact:true})).toContainText("₱10.00");
- await expect(page.getByRole("heading",{name:"Transactions",exact:true})).toBeVisible();await expect(page.getByRole("button",{name:/View Reviewed merchant/}).first()).toBeVisible();
+ await detail.getByRole("link",{name:`Open account ${card.name}`,exact:true}).click();await expect(page.getByRole("heading",{name:"Transactions",exact:true})).toBeVisible();
+ await expect(page.getByRole("button",{name:/View Reviewed merchant/}).first()).toBeVisible();
  await page.getByRole("tab",{name:"Transactions",exact:true}).focus();await page.keyboard.press("ArrowRight");await expect(page.getByRole("tab",{name:"Statements",exact:true})).toHaveAttribute("data-state","active");
  await page.getByRole("button",{name:"View statement #2",exact:true}).click();await detail.getByText("Ledger review · row 14",{exact:true}).click();await expect(detail.getByRole("link",{name:"Ledger transaction #101",exact:true})).toBeVisible();
  await expect(page.getByRole("link",{name:"All statements for this card",exact:true})).toHaveAttribute("href","/statements?cards=1");
