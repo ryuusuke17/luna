@@ -136,5 +136,5 @@ test("date labels remain readable for month, closed/open ranges, and malformed l
   assert.match(transactionDateLabel(params("end=2026-04-30")), /^Through /);
   assert.equal(transactionDateLabel(params("month=bad")), "Invalid month");
   assert.equal(transactionDateLabel(params("start=2026-02-29")), "Invalid date range");
-  assert.equal(transactionDateFilter(params("period=all"), new Date(2026, 9, 15)).month, "2026-10");
+  assert.equal(transactionDateFilter(params("month=2026-10"), new Date(2026, 9, 15)).month, "2026-10");
 });

@@ -21,16 +21,20 @@ export function normalizeTransactionFilters(input: URLSearchParams, now = new Da
     params.delete("period");
   } else if (params.get("month")) {
     params.delete("period");
+  } else if (params.get("period") === "all") {
+    params.delete("month");
   } else {
-    params.set("period", "all");
+    params.set("month", currentMonth(now));
+    params.delete("period");
   }
   return params;
 }
 
 export function transactionDateFilter(params: URLSearchParams, now = new Date()): TransactionDateFilter {
   const start = params.get("start") || "", end = params.get("end") || "";
+  const mode = start || end ? "range" : params.get("period") === "all" ? "all" : "month";
   return {
-    mode: start || end ? "range" : params.get("month") ? "month" : "all",
+    mode,
     month: params.get("month") || currentMonth(now),
     start,
     end,
