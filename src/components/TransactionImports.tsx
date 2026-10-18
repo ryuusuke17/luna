@@ -1,5 +1,7 @@
 import {useEffect,useState} from "react";
 import {useQuery,useQueryClient} from "@tanstack/react-query";
+import {Dialog,DialogTrigger,DialogTitle,DialogDescription} from "@/components/ui/dialog";
+import WorkspaceDialogContent from "@/components/WorkspaceDialogContent";
 import {Button} from "@/components/WorkspaceButton";
 import {api,send} from "@/lib/api";
 import {decimalAmount,formatMoney} from "@/lib/finance";
@@ -10,25 +12,25 @@ type Account={id:number;name:string;type:string};
 type History={id:number;account_id:number;account_name:string;filename:string;created_at:string;rows:number;imported:number;matched:number;skipped?:number;needs_review:number;status:string;error:string};
 type Legacy={id:number;account_id:number;account_name:string;format:string;rows:number;created_at:string};
 type Entry={id:number;index:number;action:string|null;transactionId:number|null;categoryId:number|null;raw:Record<string,string>;warnings:string;row:{date:string;description:string;merchant:string;kind:string;isInstallment?:boolean;amount:number;direction:number;notes?:string;destinationId?:number}|null;category:{id?:number;label:string}|null;blockers:{code:string;message:string}[];candidates:{id:number;posted_date:string;description:string;merchant?:string;delta:number}[]};
-type Detail={id:number;account_id:number;account_name:string;account_type:string;filename:string;status:string;error:string;version:string;funding_account_id:number|null;entries:Entry[];rawSummary?:{row:number;cells:string[]}[];discrepancies:string[]};
+type Detail={id:number;account_id:number;account_name:string;account_type:string;filename:string;status:string;error:string;version:string;funding_account_id:number|null;entries:Entry[];historyExtension?:{openingDate:string;proposedDate:string;affectedRows:number;sourceDates:string[];allowed:boolean;conflict:string}|null;recoveryError?:string;rawSummary?:{row:number;cells:string[]}[];discrepancies:string[]};
 
 export default function TransactionImports({batch,account,onSelectBatch,onLegacy,onStatus}:{batch?:number;account:string;onSelectBatch:(id:number,accountId?:number)=>void;onLegacy:(format:string,id:number,accountId:number)=>void;onStatus:(message:string)=>void}){
- const client=useQueryClient(),[attention,setAttention]=useState(false),[historyOpen,setHistoryOpen]=useState(Boolean(batch)),[editing,setEditing]=useState<number|null>(null),[limit,setLimit]=useState(25),[busy,setBusy]=useState(false),[error,setError]=useState("");
+ const client=useQueryClient(),[attention,setAttention]=useState(false),[historyOpen,setHistoryOpen]=useState(Boolean(batch)),[editing,setEditing]=useState<number|null>(null),[limit,setLimit]=useState(25),[busy,setBusy]=useState(false),[error,setError]=useState(""),[confirmHistory,setConfirmHistory]=useState(false),[confirmationVersion,setConfirmationVersion]=useState("");
  const history=useQuery({queryKey:["statements"],queryFn:()=>api<History[]>("statements")});
  const legacy=useQuery({queryKey:["import-history"],queryFn:()=>api<Legacy[]>("import-history")});
  const detail=useQuery({queryKey:["statement",batch],queryFn:()=>api<Detail>(`statements/${batch}`),enabled:Boolean(batch)});
  const accounts=useQuery({queryKey:["accounts"],queryFn:()=>api<Account[]>("accounts")});
  const categories=useQuery({queryKey:["categories"],queryFn:()=>api<{id:number;name:string;kind:string}[]>("categories")});
- useEffect(()=>{if(batch)setHistoryOpen(true);setEditing(null);setLimit(25);setError("");},[batch]);
+ useEffect(()=>{if(batch)setHistoryOpen(true);setEditing(null);setLimit(25);setError("");setConfirmHistory(false);},[batch]);
  const uploads=(history.data??[]).filter(item=>!account||item.account_id===Number(account));
  const needsAttention=uploads.reduce((total,item)=>total+item.needs_review+(item.status==="failed"?1:0),0);
  const pending=detail.data?.entries.filter(entry=>!entry.action)??[];
- async function action(body:Record<string,unknown>){
+ async function action(body:Record<string,unknown>,version?:string){
   if(!detail.data||busy)return;setBusy(true);setError("");
   try{
-   const result=await send<ImportResult>(`statements/${batch}`,{...body,version:detail.data.version});
-   await client.invalidateQueries();setEditing(null);requestAnimationFrame(()=>document.getElementById("import-result")?.focus());
-   onStatus(result.imported===undefined?"File parsed. Continue import to add clear rows.":`${result.imported} imported · ${result.needsAttention} need attention · ${result.linked} already imported${result.error?` · ${result.error}`:""}`);
+   const result=await send<ImportResult>(`statements/${batch}`,{...body,version:version??detail.data.version});
+   setConfirmHistory(false);await client.invalidateQueries();setEditing(null);requestAnimationFrame(()=>document.getElementById("import-result")?.focus());
+   onStatus(body.action==="extend-history"?"History extended. Continue import to add eligible transactions.":result.imported===undefined?"File parsed. Continue import to add clear rows.":`${result.imported} imported · ${result.needsAttention} need attention · ${result.linked} already imported${result.error?` · ${result.error}`:""}`);
   }catch(reason){setError((reason as Error).message);}finally{setBusy(false);}
  }
  return <section className="mb-5 min-w-0" aria-label="Transaction imports">
@@ -51,6 +53,19 @@ export default function TransactionImports({batch,account,onSelectBatch,onLegacy
    <h2 className="break-words">{detail.data.filename}</h2><p className="mt-1 text-muted-foreground">{detail.data.account_name} - {pending.length} rows need attention. Unresolved rows do not affect balances.</p>
    <a className="quiet inline-flex min-h-11 items-center" href={`/api/statements/${detail.data.id}/download`} download>Download original</a>
    {detail.data.error&&<p role="status" className="mt-3 break-words">{detail.data.error}</p>}
+   {detail.data.recoveryError&&<p role="alert" className="mt-3 break-words text-destructive">{detail.data.recoveryError}</p>}
+   {detail.data.historyExtension&&<div className="panel my-3 grid min-w-0 gap-3" role="region" aria-label="Before account history">
+    <h3 className="font-semibold">Before account history</h3><p className="break-words">{detail.data.historyExtension.affectedRows} affected rows. Source posting dates: {detail.data.historyExtension.sourceDates.join(", ")}. Current account opening date: {detail.data.historyExtension.openingDate}. Proposed earliest date: {detail.data.historyExtension.proposedDate}.</p>
+    {detail.data.historyExtension.conflict&&<p role="alert" className="break-words text-destructive">{detail.data.historyExtension.conflict}</p>}
+    <Dialog open={confirmHistory} onOpenChange={value=>{if(!busy){setConfirmHistory(value);if(value){setConfirmationVersion(detail.data!.version);setError("");}}}}><DialogTrigger asChild><Button className="w-full whitespace-normal sm:w-fit" variant="outline" disabled={busy||detail.isFetching||!detail.data.historyExtension.allowed}>Extend account history</Button></DialogTrigger>
+     <WorkspaceDialogContent className="w-[calc(100%_-_2rem)] max-w-lg break-words [&>button]:hidden" onEscapeKeyDown={event=>{if(busy)event.preventDefault();}} onInteractOutside={event=>{if(busy)event.preventDefault();}}>
+      <DialogTitle>Extend account history?</DialogTitle><DialogDescription>Change {detail.data.account_name} opening date from {detail.data.historyExtension.openingDate} to {detail.data.historyExtension.proposedDate} for {detail.data.historyExtension.affectedRows} historical rows.</DialogDescription>
+      <p>No transactions are posted by this confirmation. Existing balances, opening-balance transactions and reconciliations are not moved or adjusted. Continue import afterward to post eligible rows on their original dates; those postings will change balances. Funding-account dates remain unchanged.</p>
+      {busy&&<p role="status">Extending account history…</p>}{error&&<p role="alert" className="break-words text-destructive">{error}</p>}
+      <div className="dialog-actions"><Button variant="outline" disabled={busy} onClick={()=>setConfirmHistory(false)}>Cancel</Button><Button disabled={busy||detail.isFetching} onClick={()=>action({action:"extend-history"},confirmationVersion)}>{busy?"Extending…":"Confirm history extension"}</Button></div>
+     </WorkspaceDialogContent>
+    </Dialog>
+   </div>}
    <div className="my-3 flex flex-wrap gap-3">{pending.length>0&&<Button disabled={busy||detail.isFetching} onClick={()=>action({action:"continue"})}>Continue import</Button>}{detail.data.status==="failed"&&<Button variant="outline" disabled={busy||detail.isFetching} onClick={()=>action({action:"reprocess"})}>Retry parsing file</Button>}{pending.length>0&&<Button variant="outline" aria-expanded={attention} onClick={()=>setAttention(value=>!value)}>{attention?"Hide unresolved rows":"Resolve uncertain rows"}</Button>}</div>
    {busy&&<p role="status">Saving import...</p>}{error&&<p role="alert" className="break-words text-destructive">{error}</p>}
    {attention&&pending.length>0&&<ul className="divide-y divide-border">{pending.slice(0,limit).map(entry=><li key={entry.id} className="py-4">

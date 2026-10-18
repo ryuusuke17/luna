@@ -3,8 +3,7 @@ import {mkdirSync,writeFileSync,readFileSync,unlinkSync,chmodSync} from "node:fs
 import {resolve,join,relative,isAbsolute} from "node:path";
 import {db} from "./db.ts";
 import {createTransaction,balanceFor} from "./ledger.ts";
-import {parseCsv} from "../../src/lib/csv.ts";
-import {parseStatementCsv,statementDiscrepancies} from "./statement-csv.ts";
+import {parseStatementCsv,statementDiscrepancies,parseTransactionCsv,transactionCsvFormatting} from "./statement-csv.ts";
 import {isCalendarDate,parseMoney,MAX_MINOR} from "../../src/lib/finance.ts";
 import {transactionType} from "../../src/lib/transactions.ts";
 
@@ -24,7 +23,8 @@ function directory(){
 }
 function filePath(key:string){if(!/^[a-f0-9-]{36}\.csv$/.test(key))throw Error("Invalid private file reference");return join(directory(),key);}
 function normalize(owner:number,a:any,r:Record<string,string>):Row{
- const installment=r.type.trim()==="installment",payment=r.type.trim()==="payment",kind=(payment?"transfer":installment?"expense":r.type.trim()) as Row['kind'];if(payment&&a.type!=="credit_card")throw Error("Payment rows require a credit card; choose the funding account during review.");if(!["income","expense","refund","transfer"].includes(kind)||!isCalendarDate(r.date)||r.date<a.opening_date||r.date>new Date().toISOString().slice(0,10)||(!r.description.trim()&&!r.merchant.trim())||r.description.length>240||r.merchant.length>240||(r.notes??"").length>500||(r.source_id??"").length>160||(r.category??"").length>60)throw Error("Invalid posting date, type or text length; use the PHP CSV template.");
+ if(!isCalendarDate(r.date))throw Error(`Invalid calendar date: ${r.date}; use unambiguous ISO YYYY-MM-DD.`);
+ const installment=r.type.trim()==="installment",payment=r.type.trim()==="payment",kind=(payment?"transfer":installment?"expense":r.type.trim()) as Row['kind'];if(payment&&a.type!=="credit_card")throw Error("Payment rows require a credit card; choose the funding account during review.");if(!["income","expense","refund","transfer"].includes(kind)||(!r.description.trim()&&!r.merchant.trim())||r.description.length>240||r.merchant.length>240||(r.notes??"").length>500||(r.source_id??"").length>160||(r.category??"").length>60)throw Error("Invalid posting date, type or text length; use the PHP CSV template.");
  const amount=parseMoney(r.amount);if(amount<=0)throw Error("Amount must be positive, exact PHP with at most two decimal places.");
  const destinations=r.destination?.trim()?db.prepare("SELECT id FROM accounts WHERE owner_id=? AND archived_at IS NULL AND name=?").all(owner,r.destination.trim()) as {id:number}[]:[];
  return{date:r.date,description:r.description,merchant:r.merchant,kind,isInstallment:kind==="expense"?installment:undefined,amount,direction:payment||kind==="income"||kind==="refund"?1:-1,sourceId:r.source_id?.trim()||null,notes:r.notes,categoryHint:r.category,destinationId:destinations.length===1?destinations[0].id:undefined};
@@ -34,28 +34,49 @@ function reviewedRow(r:Row,kind?:string|null):Row{
  if(kind!=="refund"&&kind!=="transfer")throw Error("Negative row requires explicit payment or refund classification");
  return{...r,kind};
 }
+function dateBlocker(a:any,r:Row){
+ const today=new Date().toISOString().slice(0,10);
+ if(!isCalendarDate(r.date))return{code:"invalid_date",message:"Invalid calendar date: "+r.date};
+ if(r.date>today)return{code:"future_date",message:"Future posting date: "+r.date+"; latest allowed UTC date is "+today+"."};
+ if(r.date<a.opening_date)return{code:"before_history",message:"Before account history: source posting date "+r.date+"; account opens "+a.opening_date+"."};
+ return null;
+}
+function parsedSource(owner:number,a:any,bytes:Buffer){
+ const text=new TextDecoder("utf-8",{fatal:true,ignoreBOM:true}).decode(bytes);if(text.includes("\0"))throw Error("Binary files are unsupported; export the PHP CSV template.");
+ const full=parseStatementCsv(text);if(full&&a.type!=="credit_card")throw Error("Full spreadsheet statements require a credit-card account");
+ const raw=full?full.rows:parseTransactionCsv(text);if(!raw.length)throw Error("CSV has no data rows");
+ const rows=raw.map(value=>{
+  let row:Row|undefined,warning="",source:Record<string,string>;
+  if(full){const parsed=value as typeof full.rows[number];source=parsed.raw;row=parsed.row;warning=parsed.warning;}
+  else{source=value as Record<string,string>;try{row=normalize(owner,a,source);}catch(e){warning=(e as Error).message;}}
+  if(row?.kind==="expense"&&(!full||row.isInstallment===undefined))row.isInstallment=Boolean(row.isInstallment)||transactionType(row)==="installment";
+  return{row,raw:source,warning};
+ });
+ return{full,rows,changes:transactionCsvFormatting(text)};
+}
 function stage(owner:number,s:any,bytes:Buffer){
  try{
-  const text=new TextDecoder("utf-8",{fatal:true}).decode(bytes);if(text.includes("\0"))throw Error("Binary files are unsupported; export the PHP CSV template.");
-  const full=parseStatementCsv(text),a=account(owner,s.account_id);let invalid=0;
-  if(full&&a.type!=="credit_card")throw Error("Full spreadsheet statements require a credit-card account");
-  const raw=full?full.rows:parseCsv(text);if(!raw.length)throw Error("CSV has no data rows");
+  const a=account(owner,s.account_id),{full,rows}=parsedSource(owner,a,bytes);
   db.prepare("UPDATE statements SET parser_version=?,summary_json=?,raw_summary_json=?,date_policy=? WHERE id=?").run(full?.parserVersion??"luna-csv-v1",full?JSON.stringify(full.summary):null,full?JSON.stringify(full.rawSummary):null,full?"ISO or English month-name calendar dates; posting date; UTC; no pending rows":"ISO calendar dates; posting date; UTC; no pending rows",s.id);
-  const insert=db.prepare("INSERT INTO statement_entries(statement_id,row_index,raw_json,normalized_json,warnings) VALUES(?,?,?,?,?)");
-  for(const [index,value] of raw.entries()){let row:Row|undefined,warning="",source:Record<string,string>;
-   if(full){const parsed=value as typeof full.rows[number];source=parsed.raw;row=parsed.row;warning=parsed.warning;
-    if(row&&(row.date<a.opening_date||row.date>new Date().toISOString().slice(0,10))){row=undefined;warning="Posting date must be within account history and not in the future";}
-   }else{source=value as Record<string,string>;try{row=normalize(owner,a,source);}catch(e){warning=e instanceof Error?e.message:"Invalid row";}}
-   if(row?.kind==="expense"&&(!full||row.isInstallment===undefined))row.isInstallment=Boolean(row.isInstallment)||transactionType(row)==="installment";
-   if(!row)invalid++;insert.run(s.id,index,JSON.stringify(source),row?JSON.stringify(row):null,warning);
-  }
-  db.prepare("UPDATE statements SET status=?,error=? WHERE id=?").run(invalid?"needs_attention":"ready_for_review",invalid?`${invalid} rows need attention. Correct or skip them in Transactions.`:full?.metadataWarnings.join(" ")??"",s.id);
+  const insert=db.prepare("INSERT INTO statement_entries(statement_id,row_index,raw_json,normalized_json,warnings) VALUES(?,?,?,?,?)");let invalid=0;
+  for(const [index,value] of rows.entries()){const warning=value.warning||(value.row?dateBlocker(a,value.row)?.message??"":"");if(warning)invalid++;insert.run(s.id,index,JSON.stringify(value.raw),value.row?JSON.stringify(value.row):null,warning);}
+  db.prepare("UPDATE statements SET status=?,error=? WHERE id=?").run(invalid?"needs_attention":"ready_for_review",invalid?invalid+" rows need attention. Correct or skip them in Transactions.":full?.metadataWarnings.join(" ")??"",s.id);
  }catch(e){db.prepare("UPDATE statements SET status='failed',error=? WHERE id=?").run(e instanceof Error?e.message:"Unsupported CSV",s.id);}
 }
-export function uploadStatement(owner:number,input:{accountId:number;filename:string;mime:string;base64:string;fundingAccountId?:number}){
+type UploadInput={accountId:number;filename:string;mime:string;base64:string;fundingAccountId?:number};
+function validatedUpload(owner:number,input:UploadInput){
  const a=account(owner,input?.accountId);if(typeof input.filename!=="string"||input.filename.length>180||/[\x00-\x1f/\\]/.test(input.filename)||!/^.+\.csv$/i.test(input.filename)||typeof input.mime!=="string"||!["text/csv","application/csv","application/vnd.ms-excel","text/plain",""].includes(input.mime)||typeof input.base64!=="string"||input.base64.length>2_666_668||! /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(input.base64))throw Error("Only UTF-8 PHP template CSV files up to 2 MB are supported. XLSX/PDF are unsupported.");
  if(input.fundingAccountId!==undefined){if(a.type!=="credit_card")throw Error("Payment funding default requires a credit-card statement");fundingAccount(owner,a.id,input.fundingAccountId);}
  const bytes=Buffer.from(input.base64,"base64");if(!bytes.length||bytes.length>2_000_000)throw Error("Choose a nonempty CSV up to 2 MB");
+ return{a,bytes};
+}
+export function previewTransactionImport(owner:number,input:UploadInput){
+ const {a,bytes}=validatedUpload(owner,input),parsed=parsedSource(owner,a,bytes);
+ const rows=parsed.rows.map((value,index)=>({index,row:value.row??null,warning:value.warning||(value.row?dateBlocker(a,value.row)?.message??"":"")}));
+ return{preview:true as const,changes:parsed.changes,rows,version:hash(JSON.stringify([owner,input,a.opening_date,a.archived_at,rows,parsed.changes]))};
+}
+export function uploadStatement(owner:number,input:{accountId:number;filename:string;mime:string;base64:string;fundingAccountId?:number}){
+ const {a,bytes}=validatedUpload(owner,input);
  const fileHash=hash(bytes),existing=db.prepare("SELECT id FROM statements WHERE owner_id=? AND account_id=? AND file_hash=?").get(owner,a.id,fileHash) as any;if(existing)return{id:existing.id,duplicate:true};
  const key=`${randomUUID()}.csv`,path=filePath(key);writeFileSync(path,bytes,{flag:"wx",mode:0o600});
  try{return db.transaction(()=>{const id=Number(db.prepare("INSERT INTO statements(owner_id,account_id,filename,file_key,file_hash,size,status,funding_account_id) VALUES(?,?,?,?,?,?,'processing',?)").run(owner,a.id,input.filename,key,fileHash,bytes.length,input.fundingAccountId??null).lastInsertRowid);stage(owner,{id,account_id:a.id},bytes);audit(owner,"statement.upload",id,{hash:fileHash,size:bytes.length});return{id,duplicate:false};}).immediate();}catch(e){unlinkSync(path);throw e;}
@@ -87,33 +108,69 @@ const signature=(r:Row)=>JSON.stringify([r.date,r.kind,r.amount,r.direction,...r
 export function statementDetail(owner:number,id:number){
  const s=statement(owner,id);
  const stored=db.prepare("SELECT e.*,d.action,d.transaction_id,d.category_id,d.destination_id,d.reason,d.reviewed_kind,d.request_json FROM statement_entries e LEFT JOIN statement_decisions d ON d.entry_id=e.id WHERE e.statement_id=? ORDER BY e.row_index").all(id) as any[];
- const counts=new Map<string,number>();for(const e of stored){if(e.normalized_json){const row=JSON.parse(e.normalized_json) as Row;for(const key of [signature(row),...(row.sourceId?[`source:${row.sourceId}`]:[])])counts.set(key,(counts.get(key)??0)+1);}}
- const entries=stored.map(e=>{
-  const row=e.normalized_json?JSON.parse(e.normalized_json) as Row:null,raw=JSON.parse(e.raw_json);
+ const current=db.prepare("SELECT * FROM accounts WHERE id=? AND owner_id=?").get(s.account_id,owner) as any;
+ let recovered:ReturnType<typeof recoveryRows>|undefined,recoveryError="";
+ if(stored.some(e=>!e.action&&!e.normalized_json))try{recovered=recoveryRows(owner,s,stored);}catch(error){recoveryError=(error as Error).message;}
+ const normalized=stored.map(e=>e.normalized_json?JSON.parse(e.normalized_json) as Row:!e.action?recovered?.[e.row_index]?.row??null:null);
+ const counts=new Map<string,number>();for(const row of normalized)if(row)for(const key of [signature(row),...(row.sourceId?[`source:${row.sourceId}`]:[])])counts.set(key,(counts.get(key)??0)+1);
+ const entries=stored.map((e,index)=>{
+  const row=normalized[index],raw=JSON.parse(e.raw_json);
   const effective=row&&(e.reviewed_kind?reviewedRow(row,e.reviewed_kind):row.kind!=="unresolved"?row:null);
   const matches=effective?candidates(owner,s.account_id,effective):row?(["refund","transfer"] as const).flatMap(kind=>candidates(owner,s.account_id,reviewedRow(row,kind))):[];
   const source=row?known(owner,s.account_id,row):null,repeated=!!row&&((counts.get(signature(row))??0)>1||!!row.sourceId&&(counts.get(`source:${row.sourceId}`)??0)>1);
   const category=row?categoryResolution(owner,effective??row,row.categoryHint??raw.category??"",e.action?e.category_id:undefined):null;
   const blockers:{code:string;message:string}[]=[];
   if(!e.action){
-   if(!row)blockers.push({code:"invalid",message:e.warnings||"Invalid source row; exclude with reason or upload a corrected file"});
+   if(row){const bound=dateBlocker(current,row);if(bound)blockers.push(bound);}
+   if(!row)blockers.push({code:/calendar date|month-name dates/i.test(e.warnings)?"invalid_date":"invalid",message:e.warnings||"Invalid source row; exclude with reason or upload a corrected file"});
    if(row?.kind==="unresolved")blockers.push({code:"classification",message:"Negative row requires explicit payment or refund classification"});
    if(category?.error)blockers.push({code:"category",message:category.error});
    if(effective?.kind==="transfer"){
-    try{const otherId=effective.destinationId??(effective.direction===1?s.funding_account_id:null);if(!otherId)throw Error(effective.direction===1?"Choose the paying account":"Choose the transfer destination");const other=effective.direction===1?fundingAccount(owner,s.account_id,otherId):account(owner,otherId);if(other.id===s.account_id||effective.date<other.opening_date)throw Error("Transfer needs a distinct account open on the posting date");}catch(error){blockers.push({code:"funding",message:(error as Error).message});}
+    try{const otherId=effective.destinationId??(effective.direction===1?s.funding_account_id:null);if(!otherId)throw Error(effective.direction===1?"Choose the paying account":"Choose the transfer destination");const other=effective.direction===1?fundingAccount(owner,s.account_id,otherId):account(owner,otherId);if(other.id===s.account_id||effective.date<other.opening_date)throw Error(`Funding/transfer account ${other.name} opens ${other.opening_date}; source posting date ${effective.date}. Choose an account open on that date.`);}catch(error){blockers.push({code:"funding",message:(error as Error).message});}
    }
    if(source)blockers.push({code:"source",message:"Source already imported or conflicting; link or exclude this row"});
    if(matches.length||repeated)blockers.push({code:"duplicate",message:repeated?"Repeated transaction signature in this file; review each row":"Possible duplicate; link, exclude, or import separately with reason"});
-   if(row&&db.prepare("SELECT 1 FROM accounts WHERE id=? AND archived_at IS NOT NULL").get(s.account_id))blockers.push({code:"history",message:"Account unavailable"});
+   if(row&&current.archived_at)blockers.push({code:"history",message:"Account unavailable"});
   }
-  return{id:e.id,index:e.row_index,raw,row,reviewRequired:e.review_required,warnings:e.warnings,action:e.action,transactionId:e.transaction_id,categoryId:e.category_id,destinationId:e.destination_id,reason:e.reason,reviewedKind:e.reviewed_kind,requestJson:e.request_json,candidates:matches,known:source,repeated,category,blockers,eligible:!e.action&&!blockers.length,queue:e.action?"resolved":!row?"invalid":row.kind==="unresolved"?"classification required":source?"already-imported":matches.some(m=>m.evidence.startsWith("Strong"))?"strong match":matches.length||repeated?"ambiguous":"new"};
+  return{id:e.id,index:e.row_index,raw,row,reviewRequired:e.review_required,warnings:row?dateBlocker(current,row)?.message??"":e.warnings,action:e.action,transactionId:e.transaction_id,categoryId:e.category_id,destinationId:e.destination_id,reason:e.reason,reviewedKind:e.reviewed_kind,requestJson:e.request_json,candidates:matches,known:source,repeated,category,blockers,eligible:!e.action&&!blockers.length,queue:e.action?"resolved":!row?"invalid":row.kind==="unresolved"?"classification required":source?"already-imported":matches.some(m=>m.evidence.startsWith("Strong"))?"strong match":matches.length||repeated?"ambiguous":"new"};
  });
  const reconciliation=db.prepare("SELECT * FROM reconciliations WHERE owner_id=? AND statement_id=? ORDER BY id DESC LIMIT 1").get(owner,id);
  const {file_key,file_hash,owner_id,...metadata}=s,summary=s.summary_json?JSON.parse(s.summary_json):null,rawSummary=s.raw_summary_json?JSON.parse(s.raw_summary_json):null;
  // Include selectable defaults in evidence so archived/renamed categories or funding invalidate stale approval.
  const options=db.prepare("SELECT id,name,kind,archived_at FROM categories WHERE owner_id=? ORDER BY id").all(owner),accounts=db.prepare("SELECT id,type,opening_date,archived_at FROM accounts WHERE owner_id=? ORDER BY id").all(owner);
- return{...metadata,summary,rawSummary,discrepancies:statementDiscrepancies(summary,entries.map(e=>e.row)),entries,reconciliation,version:hash(JSON.stringify([metadata,entries,reconciliation,options,accounts]))};
+ const affected=entries.filter(e=>!e.action&&e.row&&e.blockers.some(b=>b.code==="before_history"));
+ let sourceAffected=affected;
+ if(affected.length)try{const source=recoveryRows(owner,s,stored);sourceAffected=affected.filter(e=>source[e.index].row&&dateBlocker(current,source[e.index].row!)?.code==="before_history").map(e=>({...e,row:source[e.index].row!}));}catch(error){recoveryError=(error as Error).message;}
+ const conflict=historyConflict(owner,current);
+ const historyExtension=sourceAffected.length&&current.type==="credit_card"?{openingDate:current.opening_date as string,proposedDate:sourceAffected.map(e=>e.row!.date).sort()[0],affectedRows:sourceAffected.length,sourceDates:[...new Set(sourceAffected.map(e=>e.row!.date))].sort(),allowed:!conflict&&!recoveryError,conflict:recoveryError||conflict}:null;
+ return{...metadata,summary,rawSummary,historyExtension,recoveryError,discrepancies:statementDiscrepancies(summary,entries.map(e=>e.row)),entries,reconciliation,version:hash(JSON.stringify([metadata,entries,reconciliation,options,accounts,historyExtension,recoveryError]))};
 }
+function historyConflict(owner:number,a:any){
+ if(a.archived_at)return "Account unavailable; archived accounts cannot extend history.";
+ if(db.prepare("SELECT 1 FROM transactions t JOIN account_entries e ON e.transaction_id=t.id WHERE t.owner_id=? AND e.account_id=? AND t.kind='opening' AND t.voided_at IS NULL").get(owner,a.id))return "Active opening-balance transaction prevents history extension. Review the opening balance in account history; it will not be moved or adjusted.";
+ if(db.prepare("SELECT 1 FROM reconciliations WHERE owner_id=? AND account_id=? AND state='finalized'").get(owner,a.id))return "Finalized reconciliation prevents history extension. Review and reopen the reconciliation before changing account history.";
+ return "";
+}
+function recoveryRows(owner:number,s:any,stored:any[]){
+ const bytes=readFileSync(filePath(s.file_key));if(hash(bytes)!==s.file_hash)throw Error("Source mismatch. Reload; original file integrity must be restored before recovery.");
+ const parsed=parsedSource(owner,account(owner,s.account_id),bytes).rows;
+ const canonical=(raw:Record<string,string>)=>JSON.stringify(Object.keys(raw).sort().map(key=>[key,raw[key]]));
+ if(parsed.length!==stored.length||stored.some((entry,index)=>entry.row_index!==index||canonical(JSON.parse(entry.raw_json))!==canonical(parsed[index].raw)))throw Error("Source/index mismatch. Recovery aborted; no history or rows changed.");
+ return parsed;
+}
+export function extendStatementHistory(owner:number,id:number,input:{version:string}){return db.transaction(()=>{
+ const s=statement(owner,id),a=account(owner,s.account_id),detail=statementDetail(owner,id);
+ if(typeof input?.version!=="string"||input.version!==detail.version)throw Error("Statement or account changed. Reload before extending history.");
+ const extension=detail.historyExtension;
+ if(a.type!=="credit_card"||!extension)throw Error("No eligible historical card rows. Reload this import.");
+ if(!extension.allowed)throw Error(extension.conflict);
+ const stored=db.prepare("SELECT e.*,d.action FROM statement_entries e LEFT JOIN statement_decisions d ON d.entry_id=e.id WHERE e.statement_id=? ORDER BY e.row_index").all(id) as any[];
+ const rows=recoveryRows(owner,s,stored);
+ db.prepare("UPDATE accounts SET opening_date=? WHERE owner_id=? AND id=?").run(extension.proposedDate,owner,a.id);
+ for(const entry of stored)if(!entry.action&&!entry.normalized_json&&rows[entry.row_index].row){db.prepare("UPDATE statement_entries SET normalized_json=?,warnings=? WHERE id=?").run(JSON.stringify(rows[entry.row_index].row),rows[entry.row_index].warning,entry.id);}
+ audit(owner,"statement.extend-history",id,{accountId:a.id,oldOpeningDate:a.opening_date,newOpeningDate:extension.proposedDate,affectedRows:extension.affectedRows});
+ return{ok:true,message:"History extended. Continue import to add eligible transactions."};
+}).immediate();}
 export function reprocessStatement(owner:number,id:number){return db.transaction(()=>{const s=statement(owner,id);if(!["failed","needs_attention","ready_for_review"].includes(s.status))throw Error("Committed statements cannot be reprocessed; upload a corrected file separately.");if(db.prepare("SELECT 1 FROM statement_decisions WHERE statement_id=?").get(id))throw Error("Reviewed entries cannot be rewritten");db.prepare("DELETE FROM statement_entries WHERE statement_id=?").run(id);stage(owner,s,readFileSync(filePath(s.file_key)));audit(owner,"statement.reprocess",id,{parser:statement(owner,id).parser_version});return{ok:true};}).immediate();}
 export function downloadStatement(owner:number,id:number){const s=statement(owner,id);return{filename:s.filename,bytes:readFileSync(filePath(s.file_key))};}
 export function removeStatement(owner:number,id:number,input:{version:string}){
@@ -145,10 +202,21 @@ export function commitStatement(owner:number,id:number,input:{version:string;dec
  if(submitted.every(e=>e.action))return{duplicate:true,imported:0,matched:0,excluded:0,remaining:detail.entries.filter(e=>!e.action).length};
  if(input.version!==detail.version)throw Error("Statement or matches changed. Reload and review before approving.");
  const a=account(owner,detail.account_id);let imported=0,matched=0,excluded=0;
+ const stored=db.prepare("SELECT e.*,d.action FROM statement_entries e LEFT JOIN statement_decisions d ON d.entry_id=e.id WHERE e.statement_id=? ORDER BY e.row_index").all(id) as any[];
+ if(stored.some(e=>!e.action&&!e.normalized_json&&submitted.some(item=>item.id===e.id&&decisions.get(e.id)!.action!=="skip"))){
+  const recovered=recoveryRows(owner,statement(owner,id),stored);
+  for(const e of stored)if(!e.action&&!e.normalized_json&&recovered[e.row_index].row)db.prepare("UPDATE statement_entries SET normalized_json=?,warnings=? WHERE id=?").run(JSON.stringify(recovered[e.row_index].row),recovered[e.row_index].warning,e.id);
+ }
+
  const matches=new Map<number,ReturnType<typeof candidates>>(submitted.filter(entry=>!entry.action&&entry.row&&decisions.get(entry.id)!.action!=="skip").map(entry=>[entry.id,candidates(owner,a.id,reviewedRow(entry.row!,decisions.get(entry.id)!.reviewedKind))]));
  for(const entry of submitted.filter(e=>!e.action)){const d=decisions.get(entry.id)!;const r=entry.row&&d.action!=="skip"?reviewedRow(entry.row,d.reviewedKind):entry.row;let tx:number|undefined,categoryId:number|undefined,destinationId:number|undefined;
   if(d.action==="skip"){if(!d.reason?.trim())throw Error(`Row ${entry.index+1}: exclusion requires a reason`);excluded++;}
   else{if(!r)throw Error(`Row ${entry.index+1}: invalid row must be explicitly excluded`);
+   const bound=dateBlocker(a,r);if(bound)throw Error(`Row ${entry.index+1}: ${bound.message}`);
+   if(r.kind==="transfer"){
+    const otherId=d.destinationId??r.destinationId??(r.direction===1?detail.funding_account_id:undefined);
+    if(otherId){const other=r.direction===1?fundingAccount(owner,a.id,otherId):account(owner,otherId);const otherBound=dateBlocker(other,r);if(other.id===a.id||otherBound)throw Error(otherBound?.message??"Transfer needs a distinct account");}
+   }
    if(d.action==="link"){
     if(!integer(d.transactionId))throw Error("Choose an existing transaction");
     const t=db.prepare("SELECT t.*,e.delta FROM transactions t JOIN account_entries e ON e.transaction_id=t.id WHERE t.owner_id=? AND t.id=? AND e.account_id=? AND t.voided_at IS NULL").get(owner,d.transactionId,a.id) as any;
@@ -174,10 +242,10 @@ function importResult(owner:number,id:number,duplicate=false){
  return{id,accountId:detail.account_id,duplicate,status:detail.status,error:detail.error,imported:detail.entries.filter(e=>e.action==="import").length,linked:detail.entries.filter(e=>e.action==="link").length,skipped:detail.entries.filter(e=>e.action==="skip").length,needsAttention:detail.entries.filter(e=>!e.action).length};
 }
 export function autoImportStatement(owner:number,id:number,version?:string){return db.transaction(()=>{
- const detail=statementDetail(owner,id);if(version!==undefined&&version!==detail.version)throw Error("This import changed. Reload before continuing.");
+ const detail=statementDetail(owner,id);account(owner,detail.account_id);if(version!==undefined&&version!==detail.version)throw Error("This import changed. Reload before continuing.");
  const decisions:Decision[]=[];
  for(const entry of detail.entries){
-  if(entry.action||!entry.row||entry.repeated)continue;
+  if(entry.action||!entry.row||entry.repeated||entry.blockers.some(b=>["before_history","future_date","invalid_date","history","funding"].includes(b.code)))continue;
   const row=entry.row;
   if(typeof entry.known==="number"&&row.kind!=="unresolved"){
    const known=db.prepare("SELECT t.*,e.delta FROM transactions t JOIN account_entries e ON e.transaction_id=t.id WHERE t.owner_id=? AND t.id=? AND t.voided_at IS NULL AND e.account_id=?").get(owner,entry.known,detail.account_id) as {kind:string;original_currency:string;posted_date:string;delta:number;account_id:number;counter_account_id:number|null}|undefined;
@@ -208,8 +276,13 @@ export function resolveStatement(owner:number,id:number,input:{version:string;de
   const correction=decision.correction;
   if(!correction||typeof correction!=="object"||Object.keys(correction).some(key=>!["date","description","merchant","type","amount","notes","category"].includes(key))||Object.values(correction).some(value=>typeof value!=="string")||!["date","description","merchant","type","amount"].every(key=>typeof correction[key as keyof Correction]==="string"))throw Error("Invalid row correction");
   const row=normalize(owner,account(owner,detail.account_id),{...correction,source_id:entry.row?.sourceId??entry.raw.source_id??""});
+  const bound=dateBlocker(account(owner,detail.account_id),row);if(bound)throw Error(bound.message);
   if(decision.categoryId!==undefined){const category=categoryResolution(owner,row,"",decision.categoryId);if(category.error)throw Error(category.error);row.categoryHint=category.id?category.label:"";}
   if(decision.destinationId!==undefined){const other=account(owner,decision.destinationId);if(row.kind!=="transfer"||other.id===detail.account_id)throw Error("Transfer needs a distinct destination");if(row.direction===1)fundingAccount(owner,detail.account_id,other.id);row.destinationId=other.id;}
+  if(row.kind==="transfer"){
+   const otherId=row.destinationId??(row.direction===1?detail.funding_account_id:undefined);
+   if(otherId){const other=account(owner,otherId),otherBound=dateBlocker(other,row);if(otherBound)throw Error(`Funding/transfer account ${other.name}: ${otherBound.message}`);}
+  }
   audit(owner,"import.row.correct",id,{entryId:entry.id,before:entry.row,after:row});
   db.prepare("UPDATE statement_entries SET normalized_json=?,warnings='',review_required='' WHERE statement_id=? AND id=?").run(JSON.stringify(row),id,entry.id);
  }

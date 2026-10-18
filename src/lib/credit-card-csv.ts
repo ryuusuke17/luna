@@ -28,11 +28,11 @@ export function parseCreditCardStatementCsv(text:string,{currency}:{currency:str
    header=i;break;
   }
   const key=statementLabels.find(label=>normalized(label)===normalized(cells[0]));
-  if(!key||cells.length!==2||Object.hasOwn(metadataRaw,key))throw Error(`Row ${i+1}: unknown, duplicate or malformed metadata`);
+  if(!key||cells.length!==2||Object.prototype.hasOwnProperty.call(metadataRaw,key))throw Error(`Row ${i+1}: unknown, duplicate or malformed metadata`);
   metadataRaw[key]=cells[1];
  }
  if(header<0)throw Error("Missing statement line header");
- for(const key of statementLabels)if(!Object.hasOwn(metadataRaw,key)||(key!=="Statement notes"&&!metadataRaw[key].trim()))throw Error(`Missing metadata: ${key}`);
+ for(const key of statementLabels)if(!Object.prototype.hasOwnProperty.call(metadataRaw,key)||(key!=="Statement notes"&&!metadataRaw[key].trim()))throw Error(`Missing metadata: ${key}`);
  const amount=(key:string,signed=false)=>{const result=signedStatementAmount(metadataRaw[key],currency);if(!signed&&result<0)throw Error(`${key} must be nonnegative`);return result;};
  const statementDate=statementDateOnly(metadataRaw["Statement date"]),dueDate=statementDateOnly(metadataRaw["Due date"]);
  const metadata={issuer:metadataRaw.Issuer,title:metadataRaw["Statement month/title"],statementDate,statementMonth:statementDate.slice(0,7),dueDate,currency,creditLimit:amount("Credit limit"),previousBalance:amount("Previous balance",true),newCharges:amount("New charges"),paymentsCredits:amount("Payments/credits"),originalOutstandingBalance:amount("Outstanding balance",true),minimumDue:amount("Minimum due"),notes:metadataRaw["Statement notes"]};

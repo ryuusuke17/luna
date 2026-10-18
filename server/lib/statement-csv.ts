@@ -1,4 +1,4 @@
-import {decimalMoney,tokenizeCsv} from "../../src/lib/csv.ts";
+import {decimalMoney,tokenizeCsv,parseCsv} from "../../src/lib/csv.ts";
 import {isCalendarDate,parseMoney,MAX_MINOR} from "../../src/lib/finance.ts";
 
 export type StatementSummary={issuer?:string;title?:string;statementDate?:string;dueDate?:string;creditLimit?:number;previousBalance?:number;newCharges?:number;paymentsCredits?:number;outstandingBalance?:number;minimumDue?:number;notes?:string};
@@ -82,4 +82,34 @@ export function statementDiscrepancies(summary:StatementSummary|null,rows:({sour
  if(paymentsCredits!==undefined&&BigInt(paymentsCredits)!==credits)errors.push(`Summary payments/credits PHP ${decimalMoney(paymentsCredits)} differ from row credits ${credits} PHP minor units.`);
  if(previousBalance!==undefined&&outstandingBalance!==undefined&&sum([previousBalance])+charges-credits!==BigInt(outstandingBalance))errors.push("Previous balance plus signed row movements differs from summary outstanding. Source totals are reference only.");
  return errors;
+}
+
+// Only transport/header formatting is normalized; source field values remain untouched.
+export function transactionCsvFormatting(text:string){
+ const cells=tokenizeCsv(text,10000),changes:string[]=[];
+ if(text.startsWith("\uFEFF"))changes.push("Removed UTF-8 BOM");
+ if(text.includes("\r\n"))changes.push("Read CRLF line endings as CSV row separators; quoted field text preserved");
+ else if(text.includes("\r"))changes.push("Read CR line endings as CSV row separators; quoted field text preserved");
+ const full=!cells.find(r=>r.some(c=>c.trim()))?.some(c=>label(c)==="date");
+ const headerIndex=full?cells.findIndex(r=>r.some(c=>label(c)==="sale date")):0;
+ const header=cells[headerIndex];
+ if(header){
+  const normalized=header.map(value=>value.trim().replace(/\s+/g," "));
+  if(header.some((value,i)=>value!==normalized[i]))changes.push("Trimmed/collapsed header whitespace");
+  if(full&&header.some(value=>["posting date","description","amount (php)","notes"].includes(label(value))))changes.push("Mapped documented header aliases to posting date, merchant, PHP amount or transaction notes");
+  let width=normalized.length;while(width&&normalized[width-1]==="")width--;
+  if(width<normalized.length||cells.slice(headerIndex+1).some(row=>row.length>width&&row.slice(width).every(value=>!value.trim())))changes.push("Ignored empty trailing CSV cells; nonempty columns remain validated");
+ }
+ return changes;
+}
+export function parseTransactionCsv(text:string){
+ const cells=tokenizeCsv(text),header=cells.shift()?.map(value=>value.trim().replace(/\s+/g," "));
+ if(!header)throw Error("Missing CSV headers");
+ while(header.at(-1)==="")header.pop();
+ const quote=(value:string)=>'"'+value.replace(/"/g,'""')+'"';
+ const rows=cells.map((row,index)=>{
+  if(row.length<header.length||row.slice(header.length).some(value=>value.trim()))throw Error(`Row ${index+1}: inconsistent or unknown nonempty columns`);
+  return row.slice(0,header.length);
+ });
+ return parseCsv([header,...rows].map(row=>row.map(quote).join(",")).join("\n"));
 }

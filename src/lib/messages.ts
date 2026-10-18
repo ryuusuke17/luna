@@ -114,6 +114,7 @@ export function clearMessage(value: unknown): string | undefined {
   if (Object.prototype.hasOwnProperty.call(explanations, message)) return explanations[message];
   if (/csrf/i.test(message)) return explanations["Invalid CSRF token"];
   if (/request key|idempotency|different or voided transaction/i.test(message)) return "This submission was already used for a different or voided record. Reload the records and check their status before submitting again.";
+  if (/^(?:Statement or account changed\. Reload before extending history\.|Import preview changed\. Reload the formatting preview before confirming\.|No eligible historical card rows\. Reload this import\.|Active opening-balance transaction prevents history extension\.|Finalized reconciliation prevents history extension\.|Source(?:\/index)? mismatch\.|Before account history: source posting date \d{4}-\d{2}-\d{2}; account opens \d{4}-\d{2}-\d{2}\.|Future posting date: \d{4}-\d{2}-\d{2}; latest allowed UTC date is \d{4}-\d{2}-\d{2}\.|Invalid calendar date: [^\r\n]{1,100})/.test(message)) return message;
   const row = /^Row (\d+): (.+)$/i.exec(message);
   if (row) {
     const details: Record<string, string> = {

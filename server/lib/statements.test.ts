@@ -49,7 +49,7 @@ test("explicit date and money validation; large discrepancies remain inspectable
  assert.equal(statementDate("Feb 29, 2024"),"2024-02-29");assert.equal(statementDate("September 21, 2026"),"2026-09-21");for(const value of ["Feb 29, 2025","2025-02-30","09/21/2026","Sep 31, 2026"])assert.throws(()=>statementDate(value));
  assert.equal(statementMoney("-4,100.00",true),-410000);for(const value of ["1.001","1,00.00","NaN","1e3","+10"])assert.throws(()=>statementMoney(value,true));assert.throws(()=>statementMoney("-10"));
  const overflow=statementDiscrepancies({},[{sourceAmount:Number.MAX_SAFE_INTEGER},{sourceAmount:900000000000}]);assert.ok(overflow.length);assert.match(overflow.join(" "),/range/);
- const future=upload(3,fullHeader+',2099-01-01,Future posting,1,\n',"future.csv");assert.equal(statementDetail(1,future.id).entries[0].row,null);assert.match(statementDetail(1,future.id).entries[0].warnings,/future/);
+ const future=upload(3,fullHeader+',2099-01-01,Future posting,1,\n',"future.csv");assert.equal(statementDetail(1,future.id).entries[0].row?.date,"2099-01-01");assert.equal(statementDetail(1,future.id).entries[0].blockers[0].code,"future_date");assert.match(statementDetail(1,future.id).entries[0].warnings,/Future posting date/);
 });
 test("complete snapshots stage privately; negatives require reviewed decisions, funding and notes reach canonical ledger",()=>{
  db.exec("INSERT INTO accounts(id,owner_id,name,type,opening_date,credit_limit) VALUES(5,1,'Full card','credit_card','2025-01-01',9000000)");

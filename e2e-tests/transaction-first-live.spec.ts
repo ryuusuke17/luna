@@ -10,7 +10,7 @@ test("authenticated import, repayment, reports, exceptions, downloads and redire
  if(!setup.ok())expect(await setup.text()).toContain("Owner");
  expect((await request.post("/api/auth/login",{data:{username,password}})).ok()).toBe(true);
  const cookies=await page.context().cookies(),csrf=cookies.find(cookie=>cookie.name==="luna_csrf")!.value,headers={"x-luna-csrf":csrf,origin:baseURL!};
- async function post(path:string,data:unknown){const result=await request.post("/api/"+path,{headers,data});expect(result.ok(),await result.text()).toBe(true);return result.json();}
+ async function post(path:string,data:unknown){const result=await request.post("/api/"+path,{headers,data});expect(result.ok(),await result.text()).toBe(true);const value=await result.json();if(path==="statements"&&value.preview){const confirmed=await request.post("/api/"+path,{headers,data:{...(data as Record<string,unknown>),confirmation:value.version}});expect(confirmed.ok(),await confirmed.text()).toBe(true);return confirmed.json();}return value;}
  const stamp=Date.now(),bank=(await post("accounts",{name:"Fixture bank "+stamp,type:"bank",openingDate:"2025-01-01",openingBalance:"0",liquid:true})).id;
  const card=(await post("accounts",{name:"Fixture card "+stamp,type:"credit_card",creditLimit:"50000",openingDate:"2025-01-01",openingBalance:"0"})).id;
  const categories=await (await request.get("/api/categories")).json();
@@ -108,4 +108,32 @@ test("authenticated import, repayment, reports, exceptions, downloads and redire
  const templateImport=await post("statements",{accountId:templateCard,filename:"downloaded-template.csv",mime:"text/csv",base64:Buffer.from(template).toString("base64")});expect(templateImport.imported).toBe(2);expect(templateImport.needsAttention).toBe(0);
  const templateRows=await (await request.get("/api/transactions?page=1&account="+templateCard)).json();expect(templateRows.items.find((item:{merchant:string})=>item.merchant.includes("(15/24)")).is_installment).toBe(1);expect(templateRows.items.every((item:{category_id:number|null})=>item.category_id===null)).toBe(true);
 
+});
+
+
+test("historical card extension and formatting preview preserve source dates and post once (isolated real API)",async({page,baseURL})=>{
+ test.skip(!process.env.LUNA_E2E_ISOLATED_URL,"Requires an explicitly designated disposable server");expect(baseURL).toBe(process.env.LUNA_E2E_ISOLATED_URL);
+ const request=page.request,username="import_fixture",password="fixture-password-only-2026";
+ await request.post("/api/auth/setup",{data:{username,password,setupToken:"isolated-fixture-setup"}});expect((await request.post("/api/auth/login",{data:{username,password}})).ok()).toBe(true);
+ const csrf=(await page.context().cookies()).find(cookie=>cookie.name==="luna_csrf")!.value,headers={"x-luna-csrf":csrf,origin:baseURL!};
+ async function post(path:string,data:unknown){const response=await request.post("/api/"+path,{headers,data});expect(response.ok(),await response.text()).toBe(true);return response.json();}
+ const today=new Date().toISOString().slice(0,10),stamp=Date.now(),card=(await post("accounts",{name:"Historical fixture "+stamp,type:"credit_card",creditLimit:"50000",openingDate:today,openingBalance:"0"})).id;
+ const text='\uFEFF Sale   date , Posting   date , Merchant , Amount , Type , Category , Transaction notes ,\r\n,2025-04-10,"Shop, City",12.34,Expense,,,\r\n',payload={accountId:card,filename:"historical-fixture.csv",mime:"text/csv",base64:Buffer.from(text).toString("base64")};
+ const preview=await post("statements",payload);expect(preview.preview).toBe(true);expect(preview.changes).toContain("Trimmed/collapsed header whitespace");
+ const uploads=await (await request.get("/api/statements")).json();expect(uploads.some((s:{account_id:number})=>s.account_id===card)).toBe(false);
+ const imported=await post("statements",{...payload,confirmation:preview.version});expect(imported.imported).toBe(0);
+ let detail=await (await request.get("/api/statements/"+imported.id)).json();expect(detail.entries[0].row.date).toBe("2025-04-10");expect(detail.entries[0].blockers[0].code).toBe("before_history");
+ const version=detail.version,entryId=detail.entries[0].id;
+ await page.setViewportSize({width:320,height:800});await page.goto("/import-export?tab=history&batch="+imported.id+"&account="+card);
+ const opener=page.getByRole("button",{name:"Extend account history",exact:true});await opener.focus();await page.keyboard.press("Enter");const dialog=page.getByRole("dialog",{name:"Extend account history?"});await page.keyboard.press("Escape");await expect(dialog).not.toBeVisible();await expect(opener).toBeFocused();
+ expect((await (await request.get("/api/accounts")).json()).find((a:{id:number})=>a.id===card).opening_date).toBe(today);
+ await opener.click();await dialog.getByRole("button",{name:"Confirm history extension",exact:true}).click();await expect(page.locator("#import-result")).toContainText("History extended. Continue import to add eligible transactions.");
+ let current=(await (await request.get("/api/accounts")).json()).find((a:{id:number})=>a.id===card);expect(current.balance).toBe(0);expect(current.opening_date).toBe("2025-04-10");
+ const stale=await request.post("/api/statements/"+imported.id,{headers,data:{action:"extend-history",version}});expect(stale.status()).toBe(400);expect(await stale.text()).toContain("Reload");
+ await page.getByRole("button",{name:"Continue import",exact:true}).click();await expect(page.locator("#import-result")).toContainText("1 imported");
+ detail=await (await request.get("/api/statements/"+imported.id)).json();expect(detail.entries[0].id).toBe(entryId);expect(detail.entries[0].row.date).toBe("2025-04-10");expect(detail.entries[0].action).toBe("import");
+ await post("statements/"+imported.id,{action:"continue",version:detail.version});expect((await post("statements",{...payload,confirmation:(await post("statements",{...payload,preview:true})).version})).duplicate).toBe(true);
+ current=(await (await request.get("/api/accounts")).json()).find((a:{id:number})=>a.id===card);expect(current.balance).toBe(-1234);expect(await (await request.get("/api/statements/"+imported.id+"/download")).text()).toBe(text);
+ const ledger=await (await request.get("/api/transactions?account="+card+"&period=all")).json();expect(ledger.total).toBe(1);expect(ledger.items[0].posted_date).toBe("2025-04-10");expect(ledger.items[0].amount).toBe(1234);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });

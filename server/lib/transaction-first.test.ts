@@ -9,7 +9,7 @@ import {retireVerification} from "./transaction-first-migration.ts";
 const root=mkdtempSync(join(tmpdir(),"luna-transaction-first-")),originals=join(root,"originals");
 mkdirSync(originals);process.env.LUNA_DB_PATH=":memory:";process.env.LUNA_STATEMENTS_PATH=originals;
 const {db}=await import("./db.ts");
-const {importTransactions,uploadStatement,autoImportStatement,statementDetail,resolveStatement,downloadStatement}=await import("./statements.ts");
+const {importTransactions,uploadStatement,autoImportStatement,statementDetail,resolveStatement,downloadStatement,extendStatementHistory,previewTransactionImport,commitStatement,reprocessStatement}=await import("./statements.ts");
 const {createTransaction,correctTransaction,transactionVersion,balanceFor}=await import("./ledger.ts");
 const {exportRows}=await import("./csv-imports.ts");
 db.exec("INSERT INTO users(id,username,password_hash) VALUES(1,'owner','fixture'),(2,'other','fixture');INSERT INTO categories(id,owner_id,name,kind) VALUES(1,1,'Food','expense'),(2,1,'Salary','income'),(3,2,'Foreign','expense')");
@@ -227,3 +227,92 @@ test("missing private originals abort retirement without reopening evidence or m
 });
 
 test.after(()=>{db.close();assert.ok(resolve(root).startsWith(resolve(tmpdir())+sep)&&root.includes("luna-transaction-first-"));rmSync(root,{recursive:true,force:true});});
+
+
+test("past statement against a today-opened card retains posting dates and waits for confirmed history extension",()=>{
+ const card=account("Historical card","credit_card"),today=new Date().toISOString().slice(0,10);db.prepare("UPDATE accounts SET opening_date=? WHERE id=?").run(today,card);
+ const source="Sale date,Post date,Merchant,Amount\n,2025-04-10,Historical purchase,12.34\n";
+ const result=importTransactions(1,input(card,source));assert.equal(result.imported,0);assert.equal(balanceFor(1,card),0);
+ const before=statementDetail(1,result.id);assert.equal(before.entries[0].row?.date,"2025-04-10");assert.equal(before.entries[0].blockers[0].code,"before_history");assert.doesNotMatch(before.entries[0].blockers[0].message,/future/i);
+ assert.equal(before.historyExtension?.proposedDate,"2025-04-10");assert.equal(before.historyExtension?.openingDate,today);
+ extendStatementHistory(1,result.id,{version:before.version});assert.equal(balanceFor(1,card),0);
+ assert.throws(()=>extendStatementHistory(1,result.id,{version:before.version}),/Reload/);
+ const after=statementDetail(1,result.id);assert.equal(autoImportStatement(1,result.id,after.version).imported,1);assert.equal(balanceFor(1,card),-1234);
+ autoImportStatement(1,result.id);assert.equal(balanceFor(1,card),-1234);assert.equal(downloadStatement(1,result.id).bytes.toString(),source);
+});
+
+
+test("legacy partial upload recovers only pending rows; funding dates, credits, malformed and future rows remain actionable",()=>{
+ const today=new Date().toISOString().slice(0,10),card=account("Partial historical card","credit_card"),bank=account("Recent funding");
+ db.prepare("UPDATE accounts SET opening_date=? WHERE id IN (?,?)").run(today,card,bank);
+ const text=header+today+",Current,Cafe,expense,1,,current,\n2025-04-10,Old,Shop,expense,2,,old,\n2025-04-11,Payment,Bank,payment,3,,pay,\n2099-01-01,Future,Shop,expense,4,,,\n2025-02-30,Impossible,Shop,expense,5,,,\n";
+ const result=importTransactions(1,input(card,text,{fundingAccountId:bank}));assert.equal(result.imported,1);
+ const before=statementDetail(1,result.id),saved=db.prepare("SELECT * FROM statement_decisions WHERE statement_id=?").all(result.id),ids=before.entries.map(e=>e.id);
+ db.prepare("UPDATE statement_entries SET normalized_json=NULL,warnings='Posting date must be within account history and not in the future' WHERE statement_id=? AND row_index IN (1,2,3)").run(result.id);
+ const legacy=statementDetail(1,result.id);assert.equal(legacy.historyExtension?.affectedRows,2);
+ assert.throws(()=>commitStatement(1,result.id,{version:legacy.version,decisions:[{entryId:ids[1],action:"import"}]}),/Before account history/);
+ assert.throws(()=>reprocessStatement(1,result.id),/Committed|Reviewed/);
+ extendStatementHistory(1,result.id,{version:legacy.version});
+ assert.deepEqual(statementDetail(1,result.id).entries.map(e=>e.id),ids);assert.deepEqual(db.prepare("SELECT * FROM statement_decisions WHERE statement_id=?").all(result.id),saved);
+ const after=statementDetail(1,result.id);assert.ok(after.entries[2].blockers.some(b=>b.code==="funding"));assert.ok(after.entries[3].blockers.some(b=>b.code==="future_date"));assert.ok(after.entries[4].blockers.some(b=>b.code==="invalid_date"));
+ assert.equal(db.prepare("SELECT opening_date FROM accounts WHERE id=?").get(bank)?.opening_date,today);
+ assert.equal(autoImportStatement(1,result.id,after.version).imported,2);assert.equal(balanceFor(1,card),-300);assert.equal(balanceFor(1,bank),0);
+ assert.deepEqual(statementDetail(1,result.id).entries[0],after.entries[0]);
+});
+
+test("opening balances, finalized reconciliations, foreign/archived ownership and source mismatch prevent history writes",()=>{
+ const today=new Date().toISOString().slice(0,10);
+ for(const conflict of ["opening","reconciliation","source","index","archive"]){
+  const card=account("Guard "+conflict,"credit_card");db.prepare("UPDATE accounts SET opening_date=? WHERE id=?").run(today,card);
+  const uploaded=uploadStatement(1,input(card,header+"2025-04-10,Past,Shop,expense,2,,,\n"));
+  if(conflict==="opening")createTransaction(1,{kind:"opening",date:today,amount:100,accountId:card,idempotencyKey:crypto.randomUUID()});
+  if(conflict==="reconciliation")db.prepare("INSERT INTO reconciliations(owner_id,statement_id,account_id,period_start,period_end,opening_balance,closing_balance,expected_closing,difference,state,resolved_entries,actor_id) VALUES(1,?,?,'2025-04-01','2025-04-30',0,0,0,0,'finalized','[]',1)").run(uploaded.id,card);
+  if(conflict==="source")db.prepare("UPDATE statement_entries SET raw_json='{}' WHERE statement_id=?").run(uploaded.id);
+  if(conflict==="index")db.prepare("UPDATE statement_entries SET row_index=42 WHERE statement_id=?").run(uploaded.id);
+  const detail=statementDetail(1,uploaded.id);
+  if(conflict==="archive")db.prepare("UPDATE accounts SET archived_at=CURRENT_TIMESTAMP WHERE id=?").run(card);
+  const before=db.prepare("SELECT * FROM transactions WHERE account_id=?").all(card);
+  assert.throws(()=>extendStatementHistory(2,uploaded.id,{version:detail.version}),/unavailable/);
+  assert.throws(()=>extendStatementHistory(1,uploaded.id,{version:detail.version}),/opening-balance|reconciliation|mismatch|unavailable/);
+  assert.equal(db.prepare("SELECT opening_date FROM accounts WHERE id=?").get(card)?.opening_date,today);assert.deepEqual(db.prepare("SELECT * FROM transactions WHERE account_id=?").all(card),before);
+ }
+});
+
+test("history change, row recovery and audit roll back together on database failure",()=>{
+ const card=account("Rollback history","credit_card"),today=new Date().toISOString().slice(0,10);db.prepare("UPDATE accounts SET opening_date=? WHERE id=?").run(today,card);
+ const uploaded=uploadStatement(1,input(card,header+"2025-04-10,Past,Shop,expense,2,,,\n"));db.prepare("UPDATE statement_entries SET normalized_json=NULL WHERE statement_id=?").run(uploaded.id);
+ const detail=statementDetail(1,uploaded.id);
+ db.exec("CREATE TRIGGER fail_history_audit BEFORE INSERT ON audit_events WHEN NEW.action='statement.extend-history' BEGIN SELECT RAISE(ABORT,'fixture failure'); END");
+ try{assert.throws(()=>extendStatementHistory(1,uploaded.id,{version:detail.version}),/fixture failure/);}finally{db.exec("DROP TRIGGER fail_history_audit");}
+ assert.equal(db.prepare("SELECT opening_date FROM accounts WHERE id=?").get(card)?.opening_date,today);assert.equal(db.prepare("SELECT normalized_json FROM statement_entries WHERE statement_id=?").get(uploaded.id)?.normalized_json,null);assert.equal(balanceFor(1,card),0);
+ extendStatementHistory(1,uploaded.id,{version:detail.version});assert.equal(statementDetail(1,uploaded.id).entries[0].row?.date,"2025-04-10");
+});
+
+test("formatting preview is non-mutating, exact, deterministic; malformed financial fields remain blocked",()=>{
+ const card=account("Formatting preview","credit_card"),text='\uFEFF Sale   date , Posting   date , Merchant , Amount , Type , Category , Transaction notes ,\r\n,2025-04-10,"Shop, City",-12.34,Refund,,,\r\n,04/05/2025,Ambiguous,1,,,,\r\n,2025-04-12,Precision,1.234,,,,\r\n,2025-04-13,Grouping,"1,23.00",,,,\r\n,2025-04-14,Unknown,1,,,,nonempty\r\n';
+ const payload=input(card,text),before=db.prepare("SELECT count(*) n FROM statements").get(),preview=previewTransactionImport(1,payload);
+ assert.deepEqual(db.prepare("SELECT count(*) n FROM statements").get(),before);assert.equal(previewTransactionImport(1,payload).version,preview.version);
+ assert.ok(preview.changes.some(c=>c.includes("BOM")));assert.ok(preview.changes.some(c=>c.includes("whitespace")));assert.ok(preview.changes.some(c=>c.includes("trailing")));assert.ok(preview.changes.some(c=>c.includes("aliases")));
+ assert.equal(preview.rows[0].row?.amount,1234);assert.equal(preview.rows[0].row?.direction,1);assert.equal(preview.rows[0].row?.description,"Shop, City");assert.ok(preview.rows.slice(1).every(r=>r.warning));
+ const uploaded=uploadStatement(1,payload),detail=statementDetail(1,uploaded.id);assert.deepEqual(detail.entries.map(e=>e.row),JSON.parse(JSON.stringify(preview.rows.map(e=>e.row))));assert.equal(downloadStatement(1,uploaded.id).bytes.toString(),text);
+ db.prepare("UPDATE accounts SET opening_date='2025-04-11' WHERE id=?").run(card);assert.notEqual(previewTransactionImport(1,payload).version,preview.version);
+});
+
+
+test("legacy recovered duplicates remain review items before any posting",()=>{
+ const card=account("Legacy duplicate card","credit_card"),today=new Date().toISOString().slice(0,10);db.prepare("UPDATE accounts SET opening_date=? WHERE id=?").run(today,card);
+ const line="2025-04-10,Repeated,Shop,expense,2,,,\n",uploaded=uploadStatement(1,input(card,header+line+line));
+ db.prepare("UPDATE statement_entries SET normalized_json=NULL WHERE statement_id=?").run(uploaded.id);
+ let detail=statementDetail(1,uploaded.id);assert.ok(detail.entries.every(e=>e.repeated));
+ extendStatementHistory(1,uploaded.id,{version:detail.version});detail=statementDetail(1,uploaded.id);
+ assert.equal(autoImportStatement(1,uploaded.id,detail.version).imported,0);assert.equal(balanceFor(1,card),0);
+ assert.ok(statementDetail(1,uploaded.id).entries.every(e=>e.blockers.some(b=>b.code==="duplicate")));
+});
+
+test("correction enforces funding-account history without changing evidence or balances",()=>{
+ const card=account("Correction card","credit_card"),bank=account("Correction funding"),today=new Date().toISOString().slice(0,10);db.prepare("UPDATE accounts SET opening_date=? WHERE id=?").run(today,bank);
+ const uploaded=uploadStatement(1,input(card,header+"2025-04-10,Payment,Bank,payment,2,,,\n",{fundingAccountId:bank}));
+ const before=db.prepare("SELECT * FROM statement_entries WHERE statement_id=?").all(uploaded.id),detail=statementDetail(1,uploaded.id);
+ assert.throws(()=>resolveStatement(1,uploaded.id,{version:detail.version,decisions:[{entryId:detail.entries[0].id,action:"edit",correction:{date:"2025-04-10",description:"Payment",merchant:"Bank",type:"payment",amount:"2"}}]}),/Funding.transfer account.*Before account history/);
+ assert.deepEqual(db.prepare("SELECT * FROM statement_entries WHERE statement_id=?").all(uploaded.id),before);assert.equal(balanceFor(1,card),0);assert.equal(balanceFor(1,bank),0);
+});
