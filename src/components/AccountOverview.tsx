@@ -1,5 +1,5 @@
 import type { ReactNode, Ref } from "react";
-import { CalendarDays, FileText } from "lucide-react";
+import { CalendarDays } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { AccountIdentity } from "@/components/AccountCard";
 import { accountLabels, utilization, type Account } from "@/lib/accounts";
@@ -27,7 +27,6 @@ export default function AccountOverview({ account, headingRef, children }: { acc
         <div className="flex items-center justify-between gap-3"><h2 className="text-sm font-medium">Statement balance</h2><span className="rounded-full bg-muted px-2 py-1 text-xs font-medium">{s.currency}</span></div>
         <p className="mt-3 break-words text-3xl font-semibold tracking-tight tabular-nums">{formatMoney(s.amount!,s.currency)}</p>
         <p className="mt-1 text-xs text-muted-foreground">{s.semantics==="debt-positive"?(s.amount!<0?"Credit balance":"Closing debt balance"):"Closing account balance"}</p>
-        <p className="mt-3 flex items-center gap-2 text-xs text-muted-foreground"><FileText className="size-4 shrink-0" aria-hidden/>{s.date??"Statement date unknown"}</p>
         <p className="mt-1 text-xs text-muted-foreground">{sourceLabels[s.source]}</p>
         <dl className="mt-4 grid min-w-0 grid-cols-2 gap-3 border-t pt-3">
           <div className="min-w-0"><dt className="flex items-center gap-1 text-xs text-muted-foreground"><CalendarDays className="size-3 shrink-0" aria-hidden/>Due date</dt><dd className="mt-1 break-words text-sm font-medium">{s.dueDate??"Not provided"}</dd></div>
