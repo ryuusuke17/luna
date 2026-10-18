@@ -143,7 +143,13 @@ test("account overview separates statement currencies, due details and ledger; m
  await expect(header.getByLabel("Ledger reference",{exact:true})).toHaveCount(0);
  await expect(header.getByRole("meter")).toHaveAttribute("aria-valuenow","100");await expect(header.getByRole("meter")).toHaveAttribute("aria-valuetext",/125% utilized/);
  await expect(header.getByText("Over the recorded credit limit",{exact:true})).toBeVisible();
- for(const width of [320,640,1200]){await page.setViewportSize({width,height:800});await expect(php).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);}
+ for(const width of [320,640,1200]){
+  await page.setViewportSize({width,height:800});await expect(php).toBeVisible();
+  const balance=(await php.boundingBox())!,usage=(await header.getByLabel("Credit utilization",{exact:true}).boundingBox())!;
+  if(width>=640){expect(Math.abs(balance.y-usage.y)).toBeLessThan(1);expect(Math.abs(balance.height-usage.height)).toBeLessThan(1);expect(usage.x).toBeGreaterThanOrEqual(balance.x+balance.width);}
+  else expect(usage.y).toBeGreaterThanOrEqual(balance.y+balance.height);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ }
  await header.getByRole("link",{name:"Import statements",exact:true}).focus();await expect(header.getByRole("link",{name:"Import statements",exact:true})).toBeFocused();
  expect(state.errors).toEqual([]);expect(state.writes).toEqual([]);
 });
