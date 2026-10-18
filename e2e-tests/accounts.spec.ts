@@ -50,7 +50,10 @@ test("credit cards keep transparent logos, twelve masked digits and network insi
  for(const width of [320,640,1200]){
   await page.setViewportSize({width,height:800});await page.goto("/accounts");
   const card=page.locator(".luna-account-card"),link=card.getByRole("link"),network=card.getByRole("img",{name:"Mastercard",exact:true});
-  await expect(card.getByRole("button")).toHaveCount(0);await expect(card.getByText(/Limit|utilization/i)).toHaveCount(0);
+  await expect(card.getByRole("button")).toHaveCount(0);await expect(card.getByText(/Ledger balance · No statements uploaded/)).toHaveCount(0);
+  await expect(card.getByRole("meter")).toHaveAttribute("aria-valuenow","0.95");
+  await expect(card.getByText("1% utilization · Ledger · PHP",{exact:true})).toBeVisible();
+  await expect(link).toHaveCSS("min-height","0px");await expect(card.locator("h3")).toHaveCSS("margin-top","4px");
   await expect(card.locator(".luna-account-number")).toHaveText("•••• •••• ••••4321");
   await expect(link).toHaveCSS("text-decoration-line","none");await link.hover();await expect(link).toHaveCSS("text-decoration-line","none");await link.focus();
   await expect(link).toBeFocused();expect(await link.evaluate(el=>getComputedStyle(el,"::after").outlineStyle)).toBe("solid");
@@ -63,6 +66,27 @@ test("credit cards keep transparent logos, twelve masked digits and network insi
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  }
  expect(state.errors).toEqual([]);
+});
+
+test("utilization meters clamp over-limit and credit balances; other accounts have no bar",async({page})=>{
+ await workspace(page);
+ const base={type:"credit_card",opening_date:"2025-01-01",credit_limit:100000,balance:-125000};
+ await page.route("**/api/accounts",route=>route.fulfill({json:[
+  {...base,id:1,name:"Over limit"},
+  {...base,id:2,name:"Credit balance",balance:10000},
+  {...base,id:3,name:"Unknown limit",credit_limit:null},
+  {...base,id:4,name:"Daily bank",type:"bank"},
+ ]}));
+ await page.goto("/accounts");
+ const card=(name:string)=>page.locator(".luna-account-card").filter({has:page.getByRole("link",{name:`View account details for ${name}`,exact:true})});
+ await expect(card("Over limit").getByRole("meter")).toHaveAttribute("aria-valuenow","100");
+ await expect(card("Over limit").getByRole("meter")).toHaveAttribute("aria-valuetext",/125% utilization/);
+ await expect(card("Credit balance").getByRole("meter")).toHaveAttribute("aria-valuenow","0");
+ await expect(card("Unknown limit").getByRole("meter")).toHaveCount(0);
+ await expect(card("Unknown limit").getByText("Utilization unavailable",{exact:true})).toBeVisible();
+ await expect(card("Daily bank").getByRole("meter")).toHaveCount(0);
+ await expect(card("Daily bank").getByText(/utilization/i)).toHaveCount(0);
+ await expect(page.getByText("Ledger balance · No statements uploaded",{exact:true})).toHaveCount(0);
 });
 
 test("account creation defaults date and optional name with concise ShopMore product",async({page})=>{

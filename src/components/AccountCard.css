@@ -71,7 +71,6 @@
 .luna-account-title {
   display: block;
   max-width: 100%;
-  min-height: 44px;
   border-radius: 4px;
   color: var(--account-ink);
   text-align: left;
@@ -120,6 +119,8 @@
 }
 .luna-account-number { font-size: clamp(16px, 2.3vw, 24px); letter-spacing: .08em; }
 .luna-account-balance { font-size: clamp(22px, 2.3vw, 28px); line-height: 1.2; overflow-wrap: anywhere; }
+.luna-account-utilization { background: var(--account-blue-mid); border: 1px solid var(--account-rim); }
+.luna-account-utilization > div { background: var(--account-ink); }
 
 @media (max-width: 480px) {
   .luna-account-card { padding: 16px; gap: 8px; }
@@ -127,4 +128,6 @@
 }
 @media (forced-colors: active) {
   .luna-account-watermark { display: none; }
+  .luna-account-utilization { background: Canvas; border-color: CanvasText; }
+  .luna-account-utilization > div { background: Highlight; forced-color-adjust: none; }
 }
