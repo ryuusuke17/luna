@@ -44,6 +44,28 @@ test("account dialogs preserve type-aware fields, focus, conflicts and concurren
  expect(state.writes).toHaveLength(3);expect(state.writes[1].body.expected).not.toContain('"display"');expect(state.errors).toEqual([]);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
 
+test("account creation defaults date and optional name with concise ShopMore product",async({page})=>{
+ const state=await workspace(page);await page.goto("/accounts");
+ await page.getByRole("button",{name:"Add account",exact:true}).click();
+ const dialog=page.getByRole("dialog",{name:"New account"});
+ await expect(dialog.getByLabel("Opening date")).toHaveCount(0);
+ await expect(dialog.getByLabel("Account name")).not.toHaveAttribute("required", "");
+ await dialog.getByLabel("Issuer / bank").selectOption("BDO");
+ await dialog.getByLabel("Card / product").selectOption({label:"ShopMore Mastercard"});
+ await expect(dialog.getByLabel("Card network")).toHaveValue("Mastercard");
+ await dialog.getByLabel("Credit limit · PHP").fill("10000");
+ await dialog.getByRole("button",{name:"Save account",exact:true}).click();
+ await expect(dialog).not.toBeVisible();
+ expect(state.writes[0].body).toMatchObject({name:"BDO ShopMore Mastercard",product:"ShopMore Mastercard",openingBalance:"0"});
+ expect(state.writes[0].body.openingDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+ await page.getByRole("button",{name:"Add account",exact:true}).click();
+ await dialog.getByLabel("Account / card type").selectOption("cash");
+ await dialog.getByRole("button",{name:"Save account",exact:true}).click();
+ await expect(dialog).not.toBeVisible();
+ expect(state.writes[1].body.name).toBe("Cash");
+ expect(state.errors).toEqual([]);
+});
+
 test("native account navigation, scoped URL filters, source restoration and ledger totals",async({page})=>{
  const state=await workspace(page);await page.setViewportSize({width:320,height:740});await page.goto("/accounts");
  await expect(page.getByText("Balance · Apr 2026",{exact:true})).toBeVisible();const link=page.getByRole("link",{name:"View account details for Daily bank"});await expect(link).toHaveAttribute("href","/accounts/1");await link.focus();await page.keyboard.press("Enter");await expect(page).toHaveURL(/\/accounts\/1$/);

@@ -23,9 +23,10 @@ export default function AccountDialog({ account, onClose }: { account?: Account;
     event.preventDefault(); if (pending.current) return;
     const form = new FormData(event.currentTarget), provider = issuer === "Other" ? customIssuer.trim() : issuer;
     pending.current = true; setBusy(true); setError("");
-    const body = { name: form.get("name"), issuer: provider || null, product: isCard ? product || null : account?.product ?? null, network: isCard ? network || null : account?.network ?? null, last4: isCard ? form.get("last4") || null : account?.last4 ?? null, creditLimit: form.get("creditLimit") || undefined, liquid: form.get("liquid") === "on" };
+    const name = String(form.get("name") ?? "").trim() || ([provider, isCard ? product : ""].filter(Boolean).join(" ") || accountLabels[type]).slice(0, 80);
+    const body = { name, issuer: provider || null, product: isCard ? product || null : account?.product ?? null, network: isCard ? network || null : account?.network ?? null, last4: isCard ? form.get("last4") || null : account?.last4 ?? null, creditLimit: form.get("creditLimit") || undefined, liquid: form.get("liquid") === "on" };
     try {
-      await api(account ? `accounts/${account.id}` : "accounts", { method: account ? "PATCH" : "POST", body: JSON.stringify(account ? { ...body, expected: JSON.stringify(editableAccountRecord(account)) } : { ...body, issuer: provider || undefined, product: product || undefined, network: network || undefined, type, openingDate: form.get("date"), openingBalance: "0" }) });
+      await api(account ? `accounts/${account.id}` : "accounts", { method: account ? "PATCH" : "POST", body: JSON.stringify(account ? { ...body, expected: JSON.stringify(editableAccountRecord(account)) } : { ...body, issuer: provider || undefined, product: product || undefined, network: network || undefined, type, openingDate: new Date().toISOString().slice(0, 10), openingBalance: "0" }) });
       await client.invalidateQueries(); onClose();
     } catch (e) { setError(e instanceof Error ? e.message : "Unable to save account"); }
     finally { pending.current = false; setBusy(false); }
@@ -34,7 +35,6 @@ export default function AccountDialog({ account, onClose }: { account?: Account;
     <DialogHeader><DialogTitle>{account ? "Edit account details" : "New account"}</DialogTitle><DialogDescription>Account identity only. Existing transactions and opening balances remain unchanged.</DialogDescription></DialogHeader>
     <form className="grid min-w-0 gap-4 sm:grid-cols-2" onSubmit={save} aria-busy={busy} aria-describedby={error ? "account-error" : undefined}>
       <fieldset disabled={busy} className="contents">
-        <label className="min-w-0">Account name<input className="field" name="name" required maxLength={80} defaultValue={account?.name} aria-invalid={Boolean(error)} aria-describedby={error ? "account-error" : undefined}/></label>
         <label className="min-w-0">Account / card type<select className="field" value={type} disabled={Boolean(account)} onChange={e => changeType(e.target.value as AccountType)}>{Object.entries(accountLabels).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select>{account && <span className="mt-1 block text-xs text-muted-foreground">Account type cannot be changed.</span>}</label>
         {(isCard || type === "wallet") && <>
           <label className="min-w-0">{type === "wallet" ? "Wallet provider" : "Issuer / bank"}<select className="field" value={issuer} onChange={e => { setIssuer(e.target.value); setProduct(""); setNetwork(""); }}><option value="">Select provider</option>{issuers.map(i => <option key={i}>{i}</option>)}<option value="Other">Other provider</option></select></label>
@@ -43,8 +43,8 @@ export default function AccountDialog({ account, onClose }: { account?: Account;
             <label className="min-w-0">Card network<select className="field" value={network} onChange={e=>setNetwork(e.target.value)}><option value="">Select network</option>{network&&!cardNetworks.includes(network)&&<option>{network}</option>}{cardNetworks.map(n=><option key={n}>{n}</option>)}</select></label>
             <label className="min-w-0">Last 4 digits (optional)<input className="field" name="last4" inputMode="numeric" pattern="[0-9]{4}" maxLength={4} defaultValue={account?.last4 ?? ""}/></label></>}
         </>}
-        {!account&&<label className="min-w-0">Opening date<input className="field" name="date" type="date" required max={new Date().toISOString().slice(0,10)} defaultValue={new Date().toISOString().slice(0,10)}/></label>}
         {type==="credit_card"&&<label className="min-w-0">Credit limit · PHP<input className="field" name="creditLimit" type="number" inputMode="decimal" required min="0.01" step="0.01" defaultValue={account?.credit_limit ? account.credit_limit/100 : ""}/></label>}
+        <label className="min-w-0 sm:col-span-2">Account name (optional)<input className="field" name="name" maxLength={80} defaultValue={account?.name} placeholder="Auto-generated from provider and product" aria-describedby="account-name-hint"/><span id="account-name-hint" className="mt-1 block text-xs text-muted-foreground">Leave blank to use the provider and product, or account type.</span></label>
         {["cash","bank","wallet"].includes(type)?<label className="flex min-h-11 items-center gap-3 sm:col-span-2"><input className="size-5" name="liquid" type="checkbox" defaultChecked={Boolean(account?.liquid)}/>Liquid cash/bank/wallet for cash-flow reports</label>:<input type="hidden" name="liquid" value={account?.liquid ? "on" : ""}/>}
       </fieldset>
       {error&&<p id="account-error" role="alert" className="break-words text-destructive sm:col-span-2">{error}</p>}
