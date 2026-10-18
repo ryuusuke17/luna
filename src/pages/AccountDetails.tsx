@@ -1,6 +1,7 @@
 import {useEffect,useRef,useState} from "react";
 import {Link,useNavigate,useParams,useSearchParams} from "react-router-dom";
 import {useQuery} from "@tanstack/react-query";
+import {ArrowLeftRight,Upload,History,Pencil,Trash2} from "lucide-react";
 import {Button} from "@/components/WorkspaceButton";
 import {Tabs,TabsList,TabsTrigger,TabsContent} from "@/components/ui/tabs";
 import AccountDialog from "@/components/AccountDialog";
@@ -35,9 +36,10 @@ export default function AccountDetails(){
   <Link className="inline-flex min-h-11 items-center underline" to="/accounts">Back to accounts</Link>
   {detail.isPending?<p role="status">Loading account…</p>:detail.error?<section role="alert" className="panel"><h1>Account unavailable</h1><p>{detail.error.message}</p><Button variant="outline" onClick={()=>detail.refetch()}>Retry account</Button></section>:account&&<>
    <AccountOverview account={account} headingRef={heading}>
-    {!account.archived_at&&<>{["cash","wallet","bank"].includes(account.type)&&<Button variant="outline" onClick={()=>setEntry("transfer")}>Transfer money</Button>}{credit&&<Link className="inline-flex min-h-11 items-center underline" to={`/import-export?account=${id}&tab=import`}>Import statements</Link>}</>}
-    <Link className="inline-flex min-h-11 items-center underline" to={`/import-export?account=${id}&tab=history`}>Import history</Link>
-    <Button variant="outline" disabled={Boolean(account.archived_at)} onClick={()=>setEditing(true)}>Edit details</Button><Button variant="ghost" onClick={()=>setDeleting(true)}>Delete account</Button>
+    {!account.archived_at&&<>{["cash","wallet","bank"].includes(account.type)&&<Button variant="outline" size="icon" title="Transfer money" aria-label="Transfer money" onClick={()=>setEntry("transfer")}><ArrowLeftRight className="size-4" aria-hidden="true"/></Button>}{credit&&<Button variant="outline" size="icon" asChild title="Import statements"><Link aria-label="Import statements" to={`/import-export?account=${id}&tab=import`}><Upload className="size-4" aria-hidden="true"/></Link></Button>}</>}
+    <Button variant="outline" size="icon" asChild title="Import history"><Link aria-label="Import history" to={`/import-export?account=${id}&tab=history`}><History className="size-4" aria-hidden="true"/></Link></Button>
+    <Button variant="outline" size="icon" disabled={Boolean(account.archived_at)} title="Edit details" aria-label="Edit details" onClick={()=>setEditing(true)}><Pencil className="size-4" aria-hidden="true"/></Button>
+    <Button variant="ghost" size="icon" title="Delete account" aria-label="Delete account" onClick={()=>setDeleting(true)}><Trash2 className="size-4" aria-hidden="true"/></Button>
    </AccountOverview>
    {credit?<Tabs value={tab} onValueChange={value=>change("tab",value==="transactions"?"":value)}><TabsList aria-label="Account views"><TabsTrigger value="transactions">Transactions</TabsTrigger><TabsTrigger value="statements">Statements</TabsTrigger></TabsList><TabsContent value="transactions">{transactions}</TabsContent><TabsContent value="statements" className="space-y-4"><Link className="inline-flex min-h-11 items-center underline" to={`/statements?cards=${id}`}>All statements for this card</Link>{statements.isPending?<p role="status">Loading statements…</p>:statements.error?<div role="alert"><p>{statements.error.message}</p><Button onClick={()=>statements.refetch()}>Retry statements</Button></div>:statements.data&&<CreditCardStatements data={statements.data} onOpen={open} onPage={page=>change("statementPage",String(page))}/>}</TabsContent></Tabs>:transactions}
    {credit&&documentId&&<CreditCardStatementDetail key={documentId} id={documentId} onClose={()=>{const next=new URLSearchParams(params);for(const key of ["document","source","sourceId"])next.delete(key);setParams(next);requestAnimationFrame(()=>opener.current?.focus());}}/>}

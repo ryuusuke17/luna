@@ -20,7 +20,7 @@ export default function AccountOverview({ account, headingRef, children }: { acc
         {account.network&&<div className="min-w-0"><dt className="text-xs text-muted-foreground">Network</dt><dd className="mt-1 break-words font-medium">{account.network}</dd></div>}
         <div className="min-w-0"><dt className="text-xs text-muted-foreground">Source uploads</dt><dd className="mt-1 font-medium tabular-nums">{account.display?.count??0}</dd></div>
       </dl>
-      <div className="mt-auto flex flex-wrap gap-2 border-t pt-4">{children}</div>
+      <div className="mt-auto flex flex-wrap items-center justify-end gap-2 border-t pt-4">{children}</div>
     </Card>
       <section className="grid min-w-0 gap-3 sm:auto-rows-fr sm:grid-cols-2" aria-label="Account balance summaries">
         <Card className="min-w-0 space-y-3 p-4 shadow-none sm:p-5" aria-label="Current recorded ledger balance"><h2 className="text-sm font-medium">{debtAccount(account.type)?account.balance>0?"Recorded credit balance":"Outstanding ledger debt":"Current recorded ledger balance"}</h2><p className="break-words text-3xl font-semibold tabular-nums">{formatMoney(debtAccount(account.type)?Math.abs(account.balance):account.balance)}</p><p className="text-xs text-muted-foreground">PHP · current recorded ledger, not an issuer snapshot</p>{credit&&<p className="text-sm">Estimated available credit: {account.credit_limit?formatMoney(account.credit_limit+account.balance):"Unknown"}. Not live issuer availability.</p>}</Card>
