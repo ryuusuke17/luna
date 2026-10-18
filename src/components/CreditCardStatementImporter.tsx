@@ -31,7 +31,7 @@ export default function CreditCardStatementImporter({initialAccount}:{initialAcc
   catch(reason){setError((reason as Error).message);}finally{setBusy(false);}
  }
  const p=result?.preview;
- return <section className="panel mt-5 max-w-5xl space-y-5" aria-labelledby="credit-card-import-title">
+ return <section className="panel mt-5 w-full space-y-5" aria-labelledby="credit-card-import-title">
   <h2 id="credit-card-import-title">Import Credit Card Statement</h2><p>Statements only. No ledger transactions, account balances or payment postings change. One file per exact card. Currency requires explicit selection.</p>
   <p className="text-sm text-muted-foreground">Statement summary first; then Sale date, Post date, Merchant, Amount, Category, Transaction notes, Transaction type. Sale date may be blank; Post date is required. Expense, Installments and Card repayment received stay separate from Category. Positive billed charges; negative payments/credits. Earlier Type-column templates remain supported.</p>
   {cards.isPending?<p role="status">Loading cards…</p>:cards.error?<p role="alert">{cards.error.message}</p>:!cards.data?.allCards.some(c=>!c.archived_at)?<p>No active credit cards. <Link className="underline" to="/accounts">Create a credit card account</Link> first.</p>:<form onSubmit={preview}><fieldset disabled={busy||Boolean(result)} className="grid gap-4 sm:grid-cols-2">
@@ -39,7 +39,9 @@ export default function CreditCardStatementImporter({initialAccount}:{initialAcc
    <label>Exact credit card<select className="field" required value={cardId} onChange={e=>setCardId(e.target.value)}><option value="">Choose nickname and last four</option>{cards.data.allCards.filter(c=>!c.archived_at&&(!issuer||c.issuer===issuer)).map(c=><option key={c.id} value={c.id}>{cardLabel(c)}</option>)}</select></label>
    <label>Statement currency<select required className="field" value={currency} onChange={e=>setCurrency(e.target.value)}><option value="">Choose printed currency</option>{supportedCurrencies.filter(c=>currencyDigits(c)===2).map(c=><option key={c} value={c}>{c}</option>)}</select></label>
    <label>Statement CSV<input required className="field max-w-full" type="file" accept=".csv,text/csv" onChange={e=>setFile(e.target.files?.[0]??null)}/></label>
-   <Button disabled={busy||!cardId||!currency||!file} aria-busy={busy}>{busy?"Parsing…":"Parse and preview statement"}</Button>
+   <div className="sm:col-span-2 flex justify-end">
+    <Button disabled={busy||!cardId||!currency||!file} aria-busy={busy}>{busy?"Parsing…":"Parse and preview statement"}</Button>
+   </div>
   </fieldset></form>}
   {error&&<p role="alert" className="break-words text-destructive">{error}</p>}
   {result?.existingId&&<p role="status">{result.duplicate?"Already imported.":completed?"Statement imported.":""} <Link className="underline" to={`/statements?document=${result.existingId}`}>View statement {result.existingId}</Link>. No transactions or balances changed.</p>}
@@ -53,9 +55,9 @@ export default function CreditCardStatementImporter({initialAccount}:{initialAcc
    <fieldset disabled={busy} className="space-y-4">
     {!!result.sameDate?.length&&<label className="block">Same-card issue already exists<select required className="field" value={revision} onChange={e=>setRevision(e.target.value)}><option value="">Choose a reviewed action</option><option value="additional">Additional issue; keep both active</option>{result.sameDate.map(s=><option key={s.id} value={s.id}>Supersede #{s.id} — {s.filename}</option>)}</select><span className="text-sm">Replacement retains original records. Statements with allocations cannot be replaced.</span></label>}
     {result.requiresReview&&<><label className="flex min-h-11 items-center gap-3"><input type="checkbox" checked={ack} onChange={e=>setAck(e.target.checked)}/>I reviewed the balance, issuer and destination warnings.</label><label className="block">Review explanation<textarea className="field" required maxLength={2000} value={note} onChange={e=>setNote(e.target.value)}/></label></>}
-    <div className="flex flex-wrap gap-3"><Button disabled={busy||Boolean(result.requiresReview&&(!ack||!note.trim()))||Boolean(result.sameDate?.length&&!revision)} aria-busy={busy} onClick={confirm}>{busy?"Importing…":"Confirm statement import"}</Button><Button variant="outline" onClick={reset}>Cancel preview</Button></div>
+    <div className="flex flex-wrap justify-end gap-3"><Button variant="outline" onClick={reset}>Cancel preview</Button><Button disabled={busy||Boolean(result.requiresReview&&(!ack||!note.trim()))||Boolean(result.sameDate?.length&&!revision)} aria-busy={busy} onClick={confirm}>{busy?"Importing…":"Confirm statement import"}</Button></div>
    </fieldset>
   </div>}
-  {result&&!p&&<Button variant="outline" onClick={reset}>Import another statement</Button>}
+  {result&&!p&&<div className="flex justify-end"><Button variant="outline" onClick={reset}>Import another statement</Button></div>}
  </section>;
 }
