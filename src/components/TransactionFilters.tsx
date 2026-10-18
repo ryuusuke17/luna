@@ -82,29 +82,29 @@ export default function TransactionFilters({params, accounts, categories, onChan
           }
         }}>
           <h2 id={dateTitle} className="text-lg font-semibold">Date filter</h2>
-          <p className="mb-4 mt-1 text-sm text-muted-foreground">Filter by statement month.</p>
+          <p className="mb-4 mt-1 text-sm text-muted-foreground">Filter by statement.</p>
           <label className="block">Date mode
             <select className="field" value={dateDraft.mode} onChange={event => {
               setDateDraft({...dateDraft, mode: event.target.value as TransactionDateFilter["mode"]});
               setDateError("");
             }}>
-              <option value="month">Monthly statement</option>
+              <option value="month">Per statement</option>
               <option value="range">Custom range</option>
               <option value="all">All time</option>
             </select>
           </label>
           {dateDraft.mode === "month" && <div className="mt-4 space-y-3">
             {statementMonths.length > 0 ? (
-              <label className="block">Statement month
+              <label className="block">Statement
                 <select className="field" value={dateDraft.month} onChange={event => setDateDraft({...dateDraft, month: event.target.value})}>
-                  <option value="">Choose statement month</option>
+                  <option value="">Choose statement</option>
                   {statementMonths.map(m => (
                     <option key={m} value={m}>{statementMonthLabel(m)}</option>
                   ))}
                 </select>
               </label>
             ) : null}
-            <label className="block">{statementMonths.length > 0 ? "Or custom month" : "Month"}
+            <label className="block">{statementMonths.length > 0 ? "Or custom statement month" : "Statement month"}
               <input className="field" type="month" value={dateDraft.month} onChange={event => setDateDraft({...dateDraft, month: event.target.value})}/>
             </label>
             {latestStatementMonth && latestStatementMonth !== dateDraft.month && (
