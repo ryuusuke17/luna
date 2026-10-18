@@ -1,15 +1,16 @@
-Issuer,UnionBank
+Issuer,Your bank
 Statement month/title,September 2026
-Statement date,"Sep 21, 2026"
-Due date,"Oct 12, 2026"
+Statement date,"Sep 7, 2026"
+Due date,"Sep 24, 2026"
 Credit limit,50000.00
-Previous balance,4028.06
-New charges,7323.10
-Payments/credits,4100.00
-Outstanding balance,7251.16
+Previous balance,1000.00
+New charges,1500.00
+Payments/credits,1000.00
+Outstanding balance,1500.00
 Minimum due,500.00
-Statement notes,Historical statement snapshot
+Statement notes,
 
-Sale date,Post date,Description,Amount,Category,Transaction notes
-"Aug 23, 2026","Aug 24, 2026",Example purchase,7323.10,,INSTALMENT 6 OF 24
-"Sep 10, 2026","Sep 10, 2026",PAYMENT RECEIVED - THANK YOU,-4100.00,,,
+Sale date,Post date,Merchant,Amount,Category,Transaction notes,Transaction type
+,"Aug 10, 2026",Example merchant,500.00,,,Expense
+,"Aug 23, 2026",Card payment,-1000.00,,,Card repayment received
+,"Sep 7, 2026",(01/12) Example installment,1000.00,,,Installments

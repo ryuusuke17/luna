@@ -1,0 +1,33 @@
+Issuer,UnionBank
+Statement month/title,September 2026
+Statement date,"Sep 7, 2026"
+Due date,"Sep 24, 2026"
+Credit limit,164500.00
+Previous balance,10890.91
+New charges,13536.68
+Payments/credits,11000.00
+Outstanding balance,13427.59
+Minimum due,1262.46
+Statement notes,
+
+Sale date,Post date,Merchant,Amount,Category,Transaction notes,Transaction type
+,"Aug 10, 2026","fp*Food Panda, https://wwwde, PH",500.00,,,Expense
+,"Aug 10, 2026","GRAB, MAKATI, PH",176.00,,,Expense
+,"Aug 10, 2026","GRAB, MAKATI, PH",50.00,,,Expense
+,"Aug 10, 2026","LAYER7 NET* R7 NETWORK, BIEBERGEMUEND, DE (EUR 5.99)",437.15,,,Expense
+,"Aug 11, 2026","GRAB, PASIG CITY, PH",159.00,,,Expense
+,"Aug 13, 2026","GRAB, PASIG CITY, PH",518.00,,,Expense
+,"Aug 17, 2026","GRAB, PASIG CITY, PH",192.00,,,Expense
+,"Aug 17, 2026","GRAB, MAKATI, PH",615.00,,,Expense
+,"Aug 17, 2026","GRAB, MAKATI, PH",139.00,,,Expense
+,"Aug 17, 2026","fp*Food Panda, https://wwwde, PH",288.56,,,Expense
+,"Aug 19, 2026","GRAB, PASIG CITY, PH",176.00,,,Expense
+,"Aug 19, 2026","GLOBE-BILLSPAY, TAGUIG CITY, PH",1499.00,,,Expense
+,"Aug 19, 2026","fp*Food Panda, https://wwwde, PH",321.13,,,Expense
+,"Aug 22, 2026","GRAB, MAKATI, PH",149.00,,,Expense
+,"Aug 23, 2026",BDO BILLS PAYMENT -CASH,-11000.00,,,Card repayment received
+,"Aug 24, 2026","GRAB, PASIG CITY, PH",106.00,,,Expense
+,"Sep 7, 2026",(20/24) SILICON VALLEY-SM FAIR,1791.25,,,Installments
+,"Sep 7, 2026",(08/24) POWER MAC CENTER- SM C,1957.92,,,Installments
+,"Sep 7, 2026",Instalment Interest (04/12) [8689934],406.97,,,Installments
+,"Sep 7, 2026",Instalment Principal (04/12) [8689934],4054.70,,Source column 8: 0,Installments

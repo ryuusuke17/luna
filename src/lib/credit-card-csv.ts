@@ -2,7 +2,8 @@ import {tokenizeCsv} from "./csv.ts";
 import {isCalendarDate,parseMoney,currencyDigits,MAX_MINOR} from "./finance.ts";
 
 const statementLabels=["Issuer","Statement month/title","Statement date","Due date","Credit limit","Previous balance","New charges","Payments/credits","Outstanding balance","Minimum due","Statement notes"];
-const statementHeaders=["Sale date","Post date","Merchant","Amount","Type","Category","Transaction notes"];
+const statementHeaders=["Sale date","Post date","Merchant","Amount","Category","Transaction notes","Transaction type"];
+const legacyStatementHeaders=["Sale date","Post date","Merchant","Amount","Type","Category","Transaction notes"];
 export function statementDateOnly(value:string){
  let date=value.trim();
  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){
@@ -20,11 +21,12 @@ export function exactStatementSum(values:number[]){const result=values.reduce((s
 export function parseCreditCardStatementCsv(text:string,{currency}:{currency:string}){
  if(currencyDigits(currency)!==2)throw Error("Statement CSV v1 supports two-decimal currencies only");
  const records=tokenizeCsv(text,5100),metadataRaw:Record<string,string>={},warnings:string[]=[];
- const normalized=(s:string)=>s.trim().toLowerCase();let header=-1;
+ const normalized=(s:string)=>s.trim().toLowerCase();let header=-1,legacy=false;
  for(const [i,cells] of records.entries()){
   if(cells.every(c=>!c.trim()))continue;
   if(normalized(cells[0])===normalized(statementHeaders[0])){
-   if(cells.length!==7||cells.some((cell,j)=>normalized(cell)!==normalized(statementHeaders[j])))throw Error(`Row ${i+1}: use the exact seven-column line header`);
+   legacy=cells.length===7&&cells.every((cell,j)=>normalized(cell)===normalized(legacyStatementHeaders[j]));
+   if(!legacy&&(cells.length!==7||cells.some((cell,j)=>normalized(cell)!==normalized(statementHeaders[j]))))throw Error(`Row ${i+1}: use Sale date,Post date,Merchant,Amount,Category,Transaction notes,Transaction type`);
    header=i;break;
   }
   const key=statementLabels.find(label=>normalized(label)===normalized(cells[0]));
@@ -44,10 +46,11 @@ export function parseCreditCardStatementCsv(text:string,{currency}:{currency:str
   if(cells.length>7){if(cells.slice(7).some(c=>c.trim()))throw Error(`Row ${rowNumber}: unexpected nonempty column`);warnings.push(`Row ${rowNumber}: empty trailing fields ignored`);}
   if(cells.length<7)throw Error(`Row ${rowNumber}: seven fields required`);
   try{
-   const [sale,post,merchantRaw,amountRaw,typeRaw,categoryRaw,transactionNotesRaw]=cells;
+   const [sale,post,merchantRaw,amountRaw]=cells;
+   const [typeRaw,categoryRaw,transactionNotesRaw]=legacy?[cells[4],cells[5],cells[6]]:[cells[6],cells[4],cells[5]];
    if(!merchantRaw.trim()||merchantRaw.length>2000||[typeRaw,categoryRaw,transactionNotesRaw].some(s=>s.length>2000))throw Error("Merchant required; fields maximum 2000 characters");
    const amountSigned=signedStatementAmount(amountRaw,currency);
-   return[{rowNumber,rawFields:cells,saleDate:statementDateOnly(sale),postDate:statementDateOnly(post),merchantRaw,amountSigned,typeRaw,categoryRaw,transactionNotesRaw,candidateType:amountSigned<0?"payment / credit":/instalment|installment|\(\d+\/\d+\)/i.test(merchantRaw)?"installment candidate":"charge"}];
+   return[{rowNumber,rawFields:cells,saleDate:sale.trim()?statementDateOnly(sale):null,postDate:statementDateOnly(post),merchantRaw,amountSigned,typeRaw,categoryRaw,transactionNotesRaw,candidateType:amountSigned<0?"payment / credit":/^(installments?|instalments?)$/i.test(typeRaw.trim())||(!typeRaw.trim()&&/instalment|installment|\(\d+\/\d+\)/i.test(merchantRaw))?"installment candidate":"charge"}];
   }catch(error){throw Error(`Row ${rowNumber}: ${(error as Error).message}`);}
  });
  if(!lines.length||lines.length>5000)throw Error("Statement requires 1–5000 lines");
@@ -55,6 +58,6 @@ export function parseCreditCardStatementCsv(text:string,{currency}:{currency:str
  const reconciliation={positiveLineSum,negativeLineSum,netLineSum:exactStatementSum([positiveLineSum,negativeLineSum]),calculatedClosingBalance,reportedClosingBalance:metadata.originalOutstandingBalance,closingDifference:exactStatementSum([calculatedClosingBalance,-metadata.originalOutstandingBalance]),newChargesDifference:exactStatementSum([positiveLineSum,-metadata.newCharges]),creditDifference:exactStatementSum([-negativeLineSum,-metadata.paymentsCredits])};
  const balanceMismatch=[reconciliation.closingDifference,reconciliation.newChargesDifference,reconciliation.creditDifference].some(n=>n!==0);
  if(balanceMismatch)warnings.push("Balance difference requires explicit acknowledgement and explanation; source values remain unchanged");
- return{sourceFormat:"credit_card_statement_csv_v1",parserVersion:"credit-card-csv-v1",metadataRaw,metadata,lines,reconciliation,warnings,balanceMismatch};
+ return{sourceFormat:"credit_card_statement_csv_v1",parserVersion:legacy?"credit-card-csv-v1":"credit-card-csv-v2",metadataRaw,metadata,lines,reconciliation,warnings,balanceMismatch};
 }
 export type CreditCardPreview=ReturnType<typeof parseCreditCardStatementCsv>;
