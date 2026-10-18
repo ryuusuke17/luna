@@ -10,7 +10,8 @@ export async function importWorkspace(page:Page,existing=false){
   if(path==="auth/me")result={user:{id:1,username:"Fixture owner"}};
   else if(path==="accounts")result=accounts;
   else if(path==="categories")result=[];
-  else if(path==="credit-card-statements")result={items:[],total:0,page:1,pageSize:25,metrics:[],cards:[],allCards:[],issuers:[]};
+  else if(path.startsWith("accounts/"))result={account:accounts.find(account=>account.id===Number(path.split("/")[1])),history:{items:[],total:0,page:1,pageSize:25}};
+  else if(path==="credit-card-statements")result={items:[],total:0,page:1,pageSize:25,metrics:[],cards:[],allCards:[{...accounts[1],issuer:"Fixture bank",last4:"4321",credit_limit:5000000}],issuers:["Fixture bank"]};
   else if(path==="preferences")result={shortcuts:1,default_transaction_currency:"PHP"};
   else if(path==="statements"){
    if(method==="POST"){expect(body.accountId).toBe(1);uploaded=true;result={id:1,accountId:1,imported:1,linked:0,needsAttention:1,skipped:0,duplicate:false};}

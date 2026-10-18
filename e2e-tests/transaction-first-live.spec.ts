@@ -101,12 +101,11 @@ test("authenticated import, repayment, reports, exceptions, downloads and redire
  await page.getByRole("button",{name:/^Filter(?:,|$)/}).click();const filters=page.getByRole("dialog",{name:"Filter transactions"});await filters.getByRole("combobox",{name:"Type",exact:true}).selectOption("expense");await filters.getByRole("button",{name:"Apply",exact:true}).click();await expect(page).toHaveURL(/kind=expense/);await expect(installmentItem).toContainText("Expense");
  expect((await (await request.get("/api/reports?month=2025-04")).json()).expenses).toBe(afterInstallment.expenses);
  const editedRecord=(await (await request.get("/api/transactions?page=1&account="+bank+"&search="+encodeURIComponent(installmentMerchant))).json()).items[0];expect(editedRecord.is_installment).toBe(0);expect(editedRecord.category_id).toBeNull();
- await page.goto("/import-export?account="+bank);await page.getByRole("button",{name:"Import transactions",exact:true}).click();const importer=page.getByRole("dialog",{name:"Import transactions",exact:true});
- const downloading=page.waitForEvent("download");await importer.getByRole("button",{name:"Download full-statement template"}).click();const download=await downloading,template=await readFile((await download.path())!,"utf8");expect(template.split(/\r?\n/)[0]).toBe("Sale date,Post date,Merchant,Amount,Type,Category,Transaction notes");
- await importer.getByRole("button",{name:"Cancel",exact:true}).click();
+ await page.goto("/import-export?account="+card);const importer=page.getByRole("region",{name:"Import Credit Card Statement",exact:true});
+ const downloading=page.waitForEvent("download");await importer.getByRole("link",{name:"Download Statement CSV Template",exact:true}).click();const download=await downloading,template=await readFile((await download.path())!,"utf8");expect(template).toContain("Sale date,Post date,Merchant,Amount,Category,Transaction notes,Transaction type");
  const templateCard=(await post("accounts",{name:"Template card "+stamp,type:"credit_card",creditLimit:"50000",openingDate:"2025-01-01",openingBalance:"0"})).id;
- const templateImport=await post("statements",{accountId:templateCard,filename:"downloaded-template.csv",mime:"text/csv",base64:Buffer.from(template).toString("base64")});expect(templateImport.imported).toBe(2);expect(templateImport.needsAttention).toBe(0);
- const templateRows=await (await request.get("/api/transactions?page=1&account="+templateCard)).json();expect(templateRows.items.find((item:{merchant:string})=>item.merchant.includes("(15/24)")).is_installment).toBe(1);expect(templateRows.items.every((item:{category_id:number|null})=>item.category_id===null)).toBe(true);
+ const templateImport=await post("statements",{accountId:templateCard,filename:"downloaded-template.csv",mime:"text/csv",base64:Buffer.from(template).toString("base64")});expect(templateImport.imported).toBe(2);expect(templateImport.needsAttention).toBe(1);
+ const templateRows=await (await request.get("/api/transactions?page=1&account="+templateCard)).json();expect(templateRows.items.find((item:{merchant:string})=>item.merchant.includes("(01/12)")).is_installment).toBe(1);expect(templateRows.items.every((item:{category_id:number|null})=>item.category_id===null)).toBe(true);
 
 });
 

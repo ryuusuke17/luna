@@ -1,15 +1,9 @@
 import {test,expect} from "@playwright/test";
 import {importWorkspace} from "./fixtures/transaction-imports";
-import {reviewDialog} from "./fixtures/accessibility";
 
-for(const width of [1440,390])test("transaction-first import, exceptions and original links at "+width+"px (mocked API)",async({page},testInfo)=>{
- const fixture=await importWorkspace(page);await page.setViewportSize({width,height:900});await page.goto("/import-export");
- await page.getByRole("button",{name:"Import transactions",exact:true}).focus();await page.keyboard.press("Enter");
- const dialog=page.getByRole("dialog",{name:"Import transactions"});await expect(dialog).toBeVisible();
- await dialog.getByLabel("Account or credit card").selectOption("1");
- await dialog.getByLabel("Transaction or statement CSV").setInputFiles({name:"mixed.csv",mimeType:"text/csv",buffer:Buffer.from("fixture")});
- await reviewDialog(dialog);await dialog.getByRole("button",{name:"Import transactions",exact:true}).click();
- await expect(page).toHaveURL(/import-export\?tab=history&batch=1&account=1/);await expect(page.getByRole("status").filter({hasText:"1 imported"})).toBeVisible();
+for(const width of [1440,390])test("historical import review, exceptions and original links at "+width+"px (mocked API)",async({page},testInfo)=>{
+ const fixture=await importWorkspace(page,true);await page.setViewportSize({width,height:900});await page.goto("/import-export?tab=history&batch=1&account=1");
+ await expect(page.getByRole("heading",{name:"mixed.csv",exact:true})).toBeVisible();
  await page.getByRole("button",{name:"Resolve uncertain rows"}).click();await page.getByRole("button",{name:"Resolve row 2",exact:true}).click();
  const form=page.getByRole("form",{name:"Resolve row 2"});await form.getByLabel("Posted date").fill("2025-04-11");await form.getByRole("combobox",{name:"Type",exact:true}).selectOption("expense");
  fixture.failNextSave();await form.getByRole("button",{name:"Add transaction",exact:true}).click();await expect(page.getByRole("alert")).toContainText("could not save transaction imports");

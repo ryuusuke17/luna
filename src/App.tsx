@@ -20,7 +20,7 @@ import NotFound from "./pages/NotFound";
 import Protected from "@/components/Protected";
 import AppLayout from "@/components/AppLayout";
 const queryClient=new QueryClient();
-function ImportRedirect(){const location=useLocation(),params=new URLSearchParams(location.search),statement=params.get("statement");if(statement){params.set("batch",statement);params.delete("statement");}params.delete("duplicate");if(params.has("batch")||params.has("legacy"))params.set("tab","history");return <Navigate to={`/import-export${params.size?`?${params}`:""}`} replace/>;}
+function ImportRedirect(){const location=useLocation(),params=new URLSearchParams(location.search),statement=params.get("statement");if(statement){params.set("batch",statement);params.delete("statement");}params.delete("duplicate");const upload=params.get("upload")==="1";params.delete("upload");if(params.has("batch")||params.has("legacy"))params.set("tab","history");else if(upload)params.set("tab","import");return <Navigate to={`/import-export${params.size?`?${params}`:""}`} replace/>;}
 function TransactionsRoute(){return new URLSearchParams(useLocation().search).get("upload")==="1"?<ImportRedirect/>:<Transactions/>;}
 function StatementsRoute(){const params=new URLSearchParams(useLocation().search);return params.has("statement")||params.has("batch")?<ImportRedirect/>:<Statements/>;}
 function AccountsRoute(){const location=useLocation(),params=new URLSearchParams(location.search),id=params.get("id");if(!id)return <Accounts/>;params.delete("id");return <Navigate replace to={`/accounts/${encodeURIComponent(id)}${params.size?`?${params}`:""}`}/>;}

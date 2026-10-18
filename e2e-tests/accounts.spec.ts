@@ -163,3 +163,16 @@ test("missing statements never relabel ledger balances as statement values",asyn
  await expect(header.getByLabel("Credit utilization",{exact:true})).toContainText("Ledger · PHP");
  expect(state.errors).toEqual([]);
 });
+
+
+test("non-card accounts retain manual entry and transfers without upload shortcuts; archived cards stay restricted",async({page})=>{
+ const state=await workspace(page);let type="bank",archived=false;
+ await page.route("**/api/accounts/1",route=>route.fulfill({json:{account:{id:1,name:"Shortcut fixture",type,balance:0,credit_limit:type==="credit_card"?100000:null,opening_date:"2025-01-01",archived_at:archived?"2026-01-01":null},history:{items:[],total:0,page:1,pageSize:25}}}));
+ for(type of ["bank","cash","wallet"]){
+  await page.goto("/accounts/1");await expect(page.getByRole("button",{name:"Add transaction for this account",exact:true})).toBeVisible();await expect(page.getByRole("button",{name:"Transfer money",exact:true})).toBeVisible();
+  await expect(page.getByRole("link",{name:"Import transactions",exact:true})).toHaveCount(0);await expect(page.getByRole("link",{name:"Import statements",exact:true})).toHaveCount(0);await expect(page.getByRole("link",{name:"Import history",exact:true})).toBeVisible();
+ }
+ type="credit_card";archived=true;await page.goto("/accounts/1");await expect(page.getByRole("heading",{name:"Shortcut fixture",exact:true})).toBeVisible();
+ await expect(page.getByRole("link",{name:"Import statements",exact:true})).toHaveCount(0);await expect(page.getByRole("button",{name:"Add transaction for this account",exact:true})).toHaveCount(0);await expect(page.getByRole("button",{name:"Transfer money",exact:true})).toHaveCount(0);await expect(page.getByRole("button",{name:"Edit details",exact:true})).toBeDisabled();await expect(page.getByRole("link",{name:"Import history",exact:true})).toBeVisible();
+ expect(state.writes).toEqual([]);expect(state.errors).toEqual([]);
+});

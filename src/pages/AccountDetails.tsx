@@ -35,7 +35,7 @@ export default function AccountDetails(){
   <Link className="inline-flex min-h-11 items-center underline" to="/accounts">Back to accounts</Link>
   {detail.isPending?<p role="status">Loading account…</p>:detail.error?<section role="alert" className="panel"><h1>Account unavailable</h1><p>{detail.error.message}</p><Button variant="outline" onClick={()=>detail.refetch()}>Retry account</Button></section>:account&&<>
    <AccountOverview account={account} headingRef={heading}>
-    {!account.archived_at&&<><Button onClick={()=>setEntry("expense")}>Add transaction for this account</Button>{["cash","wallet","bank"].includes(account.type)&&<Button variant="outline" onClick={()=>setEntry("transfer")}>Transfer money</Button>}<Link className="inline-flex min-h-11 items-center underline" to={`/import-export?account=${id}&tab=import`}>{credit?"Import statements":"Import transactions"}</Link></>}
+    {!account.archived_at&&<><Button onClick={()=>setEntry("expense")}>Add transaction for this account</Button>{["cash","wallet","bank"].includes(account.type)&&<Button variant="outline" onClick={()=>setEntry("transfer")}>Transfer money</Button>}{credit&&<Link className="inline-flex min-h-11 items-center underline" to={`/import-export?account=${id}&tab=import`}>Import statements</Link>}</>}
     <Link className="inline-flex min-h-11 items-center underline" to={`/import-export?account=${id}&tab=history`}>Import history</Link>
     <Button variant="outline" disabled={Boolean(account.archived_at)} onClick={()=>setEditing(true)}>Edit details</Button><Button variant="ghost" onClick={()=>setDeleting(true)}>Delete account</Button>
    </AccountOverview>
