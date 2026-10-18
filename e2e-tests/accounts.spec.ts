@@ -37,11 +37,32 @@ test("account dialogs preserve type-aware fields, focus, conflicts and concurren
  await dialog.getByLabel("Account / card type").selectOption("wallet");await expect(dialog.getByLabel("Wallet provider")).toBeVisible();await expect(dialog.getByLabel("Card network")).toHaveCount(0);await expect(dialog.getByLabel("Card / product")).toHaveCount(0);
  await page.keyboard.press("Escape");await expect(dialog).not.toBeVisible();await expect(add).toBeFocused();
  await add.click();await dialog.getByLabel("Account / card type").selectOption("cash");await dialog.getByLabel("Account name").fill("Travel cash");await dialog.getByRole("button",{name:"Save account",exact:true}).click();await expect(dialog).not.toBeVisible();expect(state.writes[0].body).toMatchObject({name:"Travel cash",type:"cash",openingBalance:"0"});
- const menu=page.getByRole("button",{name:"More actions for Daily bank"});await menu.click();await page.getByRole("menuitem",{name:"Edit details",exact:true}).click();const edit=page.getByRole("dialog",{name:"Edit account details"});
- await expect(page).toHaveURL(/\/accounts$/);await expect(edit.getByLabel("Account / card type")).toBeDisabled();await expect(edit.getByLabel("Account name")).toHaveValue("Daily bank");await expect(edit.getByLabel("Last 4 digits (optional)")).toHaveValue("4321");
- await edit.getByLabel("Account name").fill("Renamed bank");await edit.getByRole("button",{name:"Save changes"}).click();await expect(edit).not.toBeVisible();await expect(page.getByRole("link",{name:"View account details for Renamed bank"})).toBeVisible();
- const renamed=page.getByRole("button",{name:"More actions for Renamed bank"});await renamed.click();await page.getByRole("menuitem",{name:"Edit details",exact:true}).click();state.failSaves();await edit.getByLabel("Account name").fill("Retained draft");await edit.getByRole("button",{name:"Save changes"}).click();await expect(edit.getByRole("alert")).toBeVisible();await expect(edit.getByLabel("Account name")).toHaveValue("Retained draft");await page.keyboard.press("Escape");await expect(renamed).toBeFocused();
+ await page.getByRole("link",{name:"View account details for Daily bank"}).click();const editButton=page.getByRole("button",{name:"Edit details",exact:true});await editButton.click();const edit=page.getByRole("dialog",{name:"Edit account details"});
+ await expect(page).toHaveURL(/\/accounts\/1$/);await expect(edit.getByLabel("Account / card type")).toBeDisabled();await expect(edit.getByLabel("Account name")).toHaveValue("Daily bank");await expect(edit.getByLabel("Last 4 digits (optional)")).toHaveValue("4321");
+ await edit.getByLabel("Account name").fill("Renamed bank");await edit.getByRole("button",{name:"Save changes"}).click();await expect(edit).not.toBeVisible();await expect(page.getByRole("heading",{name:"Renamed bank",exact:true})).toBeVisible();
+ await editButton.click();state.failSaves();await edit.getByLabel("Account name").fill("Retained draft");await edit.getByRole("button",{name:"Save changes"}).click();await expect(edit.getByRole("alert")).toBeVisible();await expect(edit.getByLabel("Account name")).toHaveValue("Retained draft");await page.keyboard.press("Escape");await expect(editButton).toBeFocused();
  expect(state.writes).toHaveLength(3);expect(state.writes[1].body.expected).not.toContain('"display"');expect(state.errors).toEqual([]);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+
+test("credit cards keep transparent logos, twelve masked digits and network inside the footer",async({page})=>{
+ const state=await workspace(page);
+ await page.route("**/api/accounts",route=>route.fulfill({json:[{id:1,name:"BDO ShopMore Mastercard",type:"credit_card",issuer:"BDO",product:"ShopMore Mastercard ".repeat(8),network:"Mastercard",last4:"4321",balance:-95000,credit_limit:10000000,opening_date:"2025-01-01"}]}));
+ for(const width of [320,640,1200]){
+  await page.setViewportSize({width,height:800});await page.goto("/accounts");
+  const card=page.locator(".luna-account-card"),link=card.getByRole("link"),network=card.getByRole("img",{name:"Mastercard",exact:true});
+  await expect(card.getByRole("button")).toHaveCount(0);await expect(card.getByText(/Limit|utilization/i)).toHaveCount(0);
+  await expect(card.locator(".luna-account-number")).toHaveText("•••• •••• ••••4321");
+  await expect(link).toHaveCSS("text-decoration-line","none");await link.hover();await expect(link).toHaveCSS("text-decoration-line","none");await link.focus();
+  await expect(link).toBeFocused();expect(await link.evaluate(el=>getComputedStyle(el,"::after").outlineStyle)).toBe("solid");
+  const svg=await network.getAttribute("src");expect(decodeURIComponent(svg!.split(",")[1])).not.toContain('<rect width="120" height="80"');
+  await expect(network.locator("..")).toHaveCSS("background-color","rgba(0, 0, 0, 0)");
+  await expect(card.locator("img").first().locator("..")).toHaveCSS("background-color","rgba(0, 0, 0, 0)");
+  const bounds=(await card.boundingBox())!,mark=(await network.boundingBox())!;
+  expect(mark.x+mark.width).toBeLessThanOrEqual(bounds.x+bounds.width);expect(mark.y+mark.height).toBeLessThanOrEqual(bounds.y+bounds.height);expect(mark.y).toBeGreaterThan(bounds.y+bounds.height/2);
+  expect(await card.evaluate(el=>el.scrollWidth<=el.clientWidth&&el.scrollHeight<=el.clientHeight)).toBe(true);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ }
+ expect(state.errors).toEqual([]);
 });
 
 test("account creation defaults date and optional name with concise ShopMore product",async({page})=>{

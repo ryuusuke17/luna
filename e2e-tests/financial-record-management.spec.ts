@@ -26,12 +26,19 @@ async function workspace(page:Page){
   else if(/^goals\/\d+$/.test(path)&&method==="DELETE"){goals.splice(0);result={ok:true};}
   else if(path==="accounts/1/deletion-preview")result={account:{id:1,name:"Daily bank"},version:"account-preview",counts:{transactions:2,ledger_entries:3,bills:1,payments:1,statement_rows:1,csv_rows:1,statements:1,csv_batches:1},surviving:[{id:2,name:"Savings",before:10000,change:-500,after:9500}]};
   else if(path==="accounts/1"&&method==="DELETE"){accounts.splice(0);result={ok:true};}
+  else if(path==="accounts/1")result={account:accounts[0],history:{items:[],total:0,page:1,pageSize:25},period:{month:null,start:null,end:null,opening:0,closing:100000,inflows:100000,outflows:0}};
   else if(["payment-methods","merchant-rules","providers","bills","import-history"].includes(path)||path==="search")result=[];
   await route.fulfill({json:result});
  });return{requests,prefs,transactions,budgets,goals};
 }
 
 async function recordAction(page:Page,name:string,action:string,touch=false){
+ if(action==="Delete account"){
+  const link=page.getByRole("link",{name:`View account details for ${name}`,exact:true});
+  if(await link.count()){if(touch)await link.tap();else await link.click();}
+  const button=page.getByRole("button",{name:action,exact:true});
+  if(touch)await button.tap();else await button.click();return;
+ }
  const trigger=page.getByRole("button",{name:`More actions for ${name}`,exact:true});
  if(touch)await trigger.tap();else await trigger.click();
  const item=page.getByRole("menuitem",{name:action,exact:true});
@@ -77,7 +84,12 @@ test("financial dialogs: accessible semantics, contrast, keyboard focus and erro
    await page.getByRole("dialog",{name:"Choose month"}).getByLabel("Month",{exact:true}).fill("2025-01");
    await page.getByRole("dialog",{name:"Choose month"}).getByRole("button",{name:"Apply",exact:true}).click();
   }
-  await page.getByRole("button",{name:`More actions for ${name}`,exact:true}).focus();await page.keyboard.press("Space");await page.getByRole("menuitem",{name:action,exact:true}).focus();await page.keyboard.press("Enter");const confirmation=page.getByRole("alertdialog");await expect(confirmation.getByRole("button",{name:"Cancel deletion"})).toBeVisible();if(path==="/accounts")await expect(confirmation.getByLabel("Type account name to confirm")).toBeVisible();
+  if(path==="/accounts"){
+   await page.getByRole("link",{name:`View account details for ${name}`,exact:true}).focus();await page.keyboard.press("Enter");await page.getByRole("button",{name:action,exact:true}).focus();await page.keyboard.press("Enter");
+  }else{
+   await page.getByRole("button",{name:`More actions for ${name}`,exact:true}).focus();await page.keyboard.press("Space");await page.getByRole("menuitem",{name:action,exact:true}).focus();await page.keyboard.press("Enter");
+  }
+  const confirmation=page.getByRole("alertdialog");await expect(confirmation.getByRole("button",{name:"Cancel deletion"})).toBeVisible();if(path==="/accounts")await expect(confirmation.getByLabel("Type account name to confirm")).toBeVisible();
   await reviewDialog(confirmation);await reviewFocusLoop(page,confirmation);await page.keyboard.press("Escape");await expect(confirmation).not.toBeVisible();await expect(page.locator("#main")).toBeFocused();
  }
 });

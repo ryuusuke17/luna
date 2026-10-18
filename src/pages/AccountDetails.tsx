@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/WorkspaceButton";
 import AccountDialog from "@/components/AccountDialog";
+import AccountDeletionDialog from "@/components/AccountDeletionDialog";
 import { AccountIdentity } from "@/components/AccountCard";
 import CreditCardStatementDetail from "@/components/CreditCardStatementDetail";
 import TransactionImports from "@/components/TransactionImports";
@@ -17,7 +18,7 @@ import { transactionType, transactionTypeLabel } from "@/lib/transactions";
 type Activity = { id:number; posted_date:string; merchant:string; description:string; kind:string; is_installment?:number|null; amount:number; account_id:number; counter_account_id:number|null; balance_impacts:{id:number;change:number}[] };
 const sourceLabels = {issued:"Issued credit-card statement",bank:"Bank-statement upload",archive:"Legacy reference archive",historical:"Historical statement import"};
 export default function AccountDetails() {
-  const {id=""}=useParams(),[params,setParams]=useSearchParams(),[editing,setEditing]=useState(false),[status,setStatus]=useState("");
+  const {id=""}=useParams(),navigate=useNavigate(),[params,setParams]=useSearchParams(),[editing,setEditing]=useState(false),[deleting,setDeleting]=useState(false),[status,setStatus]=useState("");
   const heading=useRef<HTMLHeadingElement>(null),opener=useRef<HTMLElement|null>(null);
   const query=new URLSearchParams();
   for(const key of ["tab","month","start","end","search","page"])if(params.has(key))query.set(key,params.get(key)!);
@@ -48,7 +49,7 @@ export default function AccountDetails() {
         {account.display?.source==="statement"?account.display.snapshots.map(s=><div key={s.id} className="space-y-1"><p className="break-words text-2xl font-semibold tabular-nums">{formatMoney(s.amount!,s.currency)}</p><p className="text-sm">{sourceLabels[s.source]} · {s.date} · {s.semantics==="debt-positive"?(s.amount!<0?"Credit balance":"Debt-positive balance"):"Asset-positive balance"}</p>{account.type==="credit_card"&&<p className="text-sm">Due {s.dueDate??"Not provided"} · Minimum due {s.minimumDue===null?"Not provided":formatMoney(s.minimumDue,s.currency)}</p>}</div>):<><p className="break-words text-2xl font-semibold tabular-nums">{formatMoney(account.balance)}</p><p>{account.display?.reason}</p>{account.type==="credit_card"&&<p className="text-sm">Statement balance: Not provided · Due: Not provided · Minimum due: Not provided</p>}</>}
         {debtAccount(account.type)&&<p className="text-sm text-muted-foreground">Ledger debt: {formatMoney(Math.max(0,-account.balance))}. Positive ledger balances represent credit, not debt.</p>}
         {account.type==="credit_card"&&<><p>Limit {account.credit_limit?formatMoney(account.credit_limit):"Not provided"} · PHP</p><p className="text-sm">{usage?`${Math.round(usage.percent)}% utilization · ${usage.source}`:"Utilization: Not provided · No compatible amount/limit currency"}. Not live available credit.</p></>}
-      </div><div className="flex flex-wrap gap-3"><Button variant="outline" onClick={()=>setEditing(true)} disabled={Boolean(account.archived_at)}>Edit details</Button><Link className="quiet inline-flex min-h-11 items-center underline" to={importUrl}>{account.type==="credit_card"?"Import statements":"Import transactions"}</Link></div></header>
+      </div><div className="flex flex-wrap gap-3"><Button variant="outline" onClick={()=>setEditing(true)} disabled={Boolean(account.archived_at)}>Edit details</Button><Button variant="destructive" onClick={()=>setDeleting(true)}>Delete account</Button><Link className="quiet inline-flex min-h-11 items-center underline" to={importUrl}>{account.type==="credit_card"?"Import statements":"Import transactions"}</Link></div></header>
       {detail.isFetching&&<p role="status">Updating account filters…</p>}
       <Tabs value={tab} onValueChange={value=>{const next=new URLSearchParams();next.set("tab",value);setParams(next);}}>
         <TabsList className="h-auto max-w-full flex-wrap" aria-label="Account information"><TabsTrigger className="min-h-11" value="statements">Statements</TabsTrigger><TabsTrigger className="min-h-11" value="activity">Balance/activity</TabsTrigger></TabsList>
@@ -74,6 +75,7 @@ export default function AccountDetails() {
       {sourceId&&/^\d+$/.test(sourceId)&&source==="bank"&&detail.data!.history.items.some(s=>s.source==="bank"&&s.sourceId===Number(sourceId))&&<section id="account-source" tabIndex={-1} className="panel" aria-label="Bank statement source"><Button variant="outline" onClick={close}>Close source details</Button><TransactionImports batch={Number(sourceId)} account={id} onSelectBatch={batch=>{const next=new URLSearchParams(params);next.set("sourceId",String(batch));setParams(next);}} onLegacy={(format,importId,accountId)=>{window.location.assign(`/transactions?legacy=${format}&importId=${importId}&account=${accountId}`);}} onStatus={setStatus}/></section>}
       {sourceId&&/^\d+$/.test(sourceId)&&source==="archive"&&detail.data!.history.items.some(s=>s.source==="archive"&&s.sourceId===Number(sourceId))&&<section id="account-source" tabIndex={-1} aria-label="Legacy statement source"><Button variant="outline" onClick={close}>Close source details</Button><LegacyStatementArchives key={sourceId} account={id} initialId={Number(sourceId)}/></section>}
       {editing&&<AccountDialog account={account} onClose={()=>setEditing(false)}/>}
+      {deleting&&<AccountDeletionDialog id={account.id} onClose={()=>setDeleting(false)} onDeleted={()=>navigate("/accounts",{replace:true})}/>}
     </>}
   </div>;
 }

@@ -11,12 +11,12 @@ import rcbc from "../../Bank Logos/RCBC_logo.svg?url";
 import robinsons from "../../Bank Logos/Robinsons_Bank_logo.svg?url";
 import security from "../../Bank Logos/Security Bank Logo.svg?url";
 import unionbank from "../../Bank Logos/UnionBank Logo.svg?url";
-import amex from "../../Card Network Logos/american-express.svg?url";
-import jcb from "../../Card Network Logos/jcb.svg?url";
-import mastercard from "../../Card Network Logos/mastercard.svg?url";
-import visa from "../../Card Network Logos/visa-alt.svg?url";
-import googlepay from "../../Card Network Logos/google-pay-alt.svg?url";
-import paypal from "../../Card Network Logos/paypal.svg?url";
+import amex from "../../Card Network Logos/american-express.svg?raw";
+import jcb from "../../Card Network Logos/jcb.svg?raw";
+import mastercard from "../../Card Network Logos/mastercard.svg?raw";
+import visa from "../../Card Network Logos/visa-alt.svg?raw";
+import googlepay from "../../Card Network Logos/google-pay-alt.svg?raw";
+import paypal from "../../Card Network Logos/paypal.svg?raw";
 
 const issuers: Record<string,string> = {
   aub, "asia united bank":aub, bdo, "bdo unibank":bdo, bpi, "bank of the philippine islands":bpi,
@@ -25,6 +25,9 @@ const issuers: Record<string,string> = {
   pnb, "philippine national bank":pnb, rcbc, "rizal commercial banking corporation":rcbc,
   "robinsons bank":robinsons, "security bank":security, unionbank, "union bank":unionbank, "unionbank of the philippines":unionbank,
 };
-const networks: Record<string,string> = {visa,mastercard,"master card":mastercard,jcb,amex,"american express":amex,"google pay":googlepay,paypal};
+const networks: Record<string,string> = Object.fromEntries(
+  Object.entries({visa,mastercard,"master card":mastercard,jcb,amex,"american express":amex,"google pay":googlepay,paypal})
+    .map(([name,svg]) => [name, `data:image/svg+xml,${encodeURIComponent(svg.replace(/<rect width="120" height="80"[^>]*\/>/, ""))}`]),
+);
 export const issuerLogo = (issuer?:string|null) => issuers[issuer?.trim().toLowerCase() ?? ""];
 export const networkLogo = (network?:string|null) => networks[network?.trim().toLowerCase() ?? ""];
