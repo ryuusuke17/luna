@@ -29,7 +29,7 @@ test("sole statement uploader preserves legacy account context without retired d
   await expect(importer).toContainText("No ledger transactions, account balances or payment postings change.");
   const template=importer.getByRole("link",{name:"Download Statement CSV Template",exact:true});await template.focus();await page.keyboard.press("Tab");await expect(importer.getByRole("link",{name:"Download earlier UnionBank sample",exact:true})).toBeFocused();
   await page.getByRole("tab",{name:"Export",exact:true}).click();await expect(page.getByRole("button",{name:"Export all transactions",exact:true})).toBeVisible();
-  await page.getByRole("tab",{name:"Import history",exact:true}).click();await expect(page.getByRole("region",{name:"Transaction imports",exact:true})).toBeVisible();
+  await page.getByRole("tab",{name:"Import",exact:true}).click();await expect(page.getByRole("region",{name:"Transaction imports",exact:true})).toBeVisible();
  }
  await page.goto("/transactions?account=1&upload=1");await expect(page.getByRole("region",{name:"Import Credit Card Statement",exact:true})).toBeVisible();await expect(page.getByRole("dialog")).toHaveCount(0);await expect(page).toHaveURL(/account=1&tab=import$/);
  expect(fixture.requests.filter(request=>request.method!=="GET")).toEqual([]);expect(errors).toEqual([]);
