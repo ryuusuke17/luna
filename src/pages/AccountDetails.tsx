@@ -14,7 +14,6 @@ import CreditCardStatementDetail from "@/components/CreditCardStatementDetail";
 import {api} from "@/lib/api";
 import type {AccountDetail} from "@/lib/accounts";
 import type {StatementDashboard} from "@/lib/credit-card-statements";
-import {formatMoney} from "@/lib/finance";
 
 export default function AccountDetails(){
  const {id=""}=useParams(),navigate=useNavigate(),[params,setParams]=useSearchParams();
@@ -33,14 +32,25 @@ export default function AccountDetails(){
  const documentId=params.get("document")||(params.get("source")==="issued"?params.get("sourceId"):null);
  const transactions=<section className="min-w-0 space-y-4" aria-label="Account transactions"><h2>Transactions</h2><p className="text-sm text-muted-foreground">All recorded activity, including unbilled purchases and both transfer directions. Payment tracker evidence is not a ledger payment.</p><TransactionHistory key={id} accountId={Number(id)} params={transactionParams} onParamsChange={historyParams}/></section>;
  return <div className="min-w-0 space-y-5">
-  <Link className="inline-flex min-h-11 items-center underline" to="/accounts">Back to accounts</Link>
-  {detail.isPending?<p role="status">Loading account…</p>:detail.error?<section role="alert" className="panel"><h1>Account unavailable</h1><p>{detail.error.message}</p><Button variant="outline" onClick={()=>detail.refetch()}>Retry account</Button></section>:account&&<>
-   <AccountOverview account={account} headingRef={heading}>
-    {!account.archived_at&&<>{["cash","wallet","bank"].includes(account.type)&&<Button variant="outline" size="icon" title="Transfer money" aria-label="Transfer money" onClick={()=>setEntry("transfer")}><ArrowLeftRight className="size-4" aria-hidden="true"/></Button>}{credit&&<Button variant="outline" size="icon" asChild title="Import statements"><Link aria-label="Import statements" to={`/import-export?account=${id}&tab=import`}><Upload className="size-4" aria-hidden="true"/></Link></Button>}</>}
-    <Button variant="outline" size="icon" asChild title="Import history"><Link aria-label="Import history" to={`/import-export?account=${id}&tab=history`}><History className="size-4" aria-hidden="true"/></Link></Button>
-    <Button variant="outline" size="icon" disabled={Boolean(account.archived_at)} title="Edit details" aria-label="Edit details" onClick={()=>setEditing(true)}><Pencil className="size-4" aria-hidden="true"/></Button>
-    <Button variant="ghost" size="icon" title="Delete account" aria-label="Delete account" onClick={()=>setDeleting(true)}><Trash2 className="size-4" aria-hidden="true"/></Button>
-   </AccountOverview>
+  {detail.isPending?<>
+   <Link className="inline-flex min-h-11 items-center underline" to="/accounts">Back to accounts</Link>
+   <p role="status">Loading account…</p>
+  </>:detail.error?<>
+   <Link className="inline-flex min-h-11 items-center underline" to="/accounts">Back to accounts</Link>
+   <section role="alert" className="panel"><h1>Account unavailable</h1><p>{detail.error.message}</p><Button variant="outline" onClick={()=>detail.refetch()}>Retry account</Button></section>
+  </>:account&&<>
+   <header className="min-w-0 space-y-4" aria-label={`${account.name} account details`}>
+    <div className="flex flex-wrap items-center justify-between gap-3">
+     <Link className="inline-flex min-h-11 items-center underline" to="/accounts">Back to accounts</Link>
+     <div className="flex flex-wrap items-center gap-2">
+      {!account.archived_at&&<>{["cash","wallet","bank"].includes(account.type)&&<Button variant="outline" size="sm" title="Transfer money" aria-label="Transfer money" onClick={()=>setEntry("transfer")}><ArrowLeftRight className="size-4 mr-1.5" aria-hidden="true"/>Transfer money</Button>}{credit&&<Button variant="outline" size="sm" asChild title="Import statements"><Link aria-label="Import statements" to={`/import-export?account=${id}&tab=import`}><Upload className="size-4 mr-1.5" aria-hidden="true"/>Import statements</Link></Button>}</>}
+      <Button variant="outline" size="icon" asChild title="Import history"><Link aria-label="Import history" to={`/import-export?account=${id}&tab=history`}><History className="size-4" aria-hidden="true"/></Link></Button>
+      <Button variant="outline" size="icon" disabled={Boolean(account.archived_at)} title="Edit details" aria-label="Edit details" onClick={()=>setEditing(true)}><Pencil className="size-4" aria-hidden="true"/></Button>
+      <Button variant="outline" size="icon" className="border text-muted-foreground hover:border-destructive hover:text-destructive" title="Delete account" aria-label="Delete account" onClick={()=>setDeleting(true)}><Trash2 className="size-4" aria-hidden="true"/></Button>
+     </div>
+    </div>
+    <AccountOverview account={account} headingRef={heading}/>
+   </header>
    {credit?<Tabs value={tab} onValueChange={value=>change("tab",value==="transactions"?"":value)}><TabsList aria-label="Account views"><TabsTrigger value="transactions">Transactions</TabsTrigger><TabsTrigger value="statements">Statements</TabsTrigger></TabsList><TabsContent value="transactions">{transactions}</TabsContent><TabsContent value="statements" className="space-y-4"><Link className="inline-flex min-h-11 items-center underline" to={`/statements?cards=${id}`}>All statements for this card</Link>{statements.isPending?<p role="status">Loading statements…</p>:statements.error?<div role="alert"><p>{statements.error.message}</p><Button onClick={()=>statements.refetch()}>Retry statements</Button></div>:statements.data&&<CreditCardStatements data={statements.data} onOpen={open} onPage={page=>change("statementPage",String(page))}/>}</TabsContent></Tabs>:transactions}
    {credit&&documentId&&<CreditCardStatementDetail key={documentId} id={documentId} onClose={()=>{const next=new URLSearchParams(params);for(const key of ["document","source","sourceId"])next.delete(key);setParams(next);requestAnimationFrame(()=>opener.current?.focus());}}/>}
    <TransactionDialog open={Boolean(entry)} defaultAccountId={account.id} defaultKind={entry??"expense"} onOpenChange={open=>{if(!open)setEntry(null);}}/>

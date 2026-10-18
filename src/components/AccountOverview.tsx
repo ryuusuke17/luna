@@ -1,4 +1,4 @@
-import type { ReactNode, Ref } from "react";
+import type { Ref } from "react";
 import { CalendarDays } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { AccountIdentity } from "@/components/AccountCard";
@@ -7,7 +7,7 @@ import { formatMoney } from "@/lib/finance";
 
 const sourceLabels={issued:"Issued credit-card statement",bank:"Bank-statement upload",archive:"Legacy reference archive",historical:"Historical statement import"};
 
-export default function AccountOverview({ account, headingRef, children }: { account: Account; headingRef: Ref<HTMLHeadingElement>; children: ReactNode }) {
+export default function AccountOverview({ account, headingRef }: { account: Account; headingRef: Ref<HTMLHeadingElement> }) {
   const credit=account.type==="credit_card",usage=credit?utilization(account):null;
   const snapshots=credit&&account.display?.source==="statement"?account.display.snapshots.filter(s=>s.amount!==null):[];
   const percent=usage?Math.min(100,Math.max(0,usage.percent)):0;
@@ -38,7 +38,7 @@ export default function AccountOverview({ account, headingRef, children }: { acc
     );
   }
 
-  return <header className={`grid min-w-0 gap-4 ${credit ? "lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]" : "max-w-xl"}`} aria-label={`${account.name} account details`}>
+  return <div className={`grid min-w-0 gap-4 ${credit ? "lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]" : "max-w-xl"}`}>
     <Card className="flex min-w-0 flex-col gap-4 p-4 shadow-none sm:p-5">
       <div className="flex items-center justify-between gap-3">
         <AccountIdentity account={account}/>
@@ -53,7 +53,6 @@ export default function AccountOverview({ account, headingRef, children }: { acc
         {account.network&&<div className="min-w-0"><dt className="text-muted-foreground">Network</dt><dd className="mt-1 break-words font-medium">{account.network}</dd></div>}
         <div className="min-w-0"><dt className="text-muted-foreground">Source uploads</dt><dd className="mt-1 font-medium tabular-nums">{account.display?.count??0}</dd></div>
       </dl>
-      <div className="mt-auto flex flex-wrap items-center justify-end gap-2 border-t pt-3">{children}</div>
     </Card>
 
     {credit&&<section className="grid min-w-0 gap-4 sm:auto-rows-fr sm:grid-cols-2" aria-label="Account balance summaries">
@@ -95,5 +94,5 @@ export default function AccountOverview({ account, headingRef, children }: { acc
 
       {snapshots.slice(1).map(s => renderStatementCard(s))}
     </section>}
-  </header>;
+  </div>;
 }
