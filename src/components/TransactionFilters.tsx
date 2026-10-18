@@ -1,4 +1,5 @@
 import {useId, useState} from "react";
+import {useQuery} from "@tanstack/react-query";
 import {CalendarDays, ChevronDown, ChevronLeft, ChevronRight, SlidersHorizontal} from "lucide-react";
 import {Button} from "@/components/WorkspaceButton";
 import DialogContent from "@/components/WorkspaceDialogContent";
@@ -6,6 +7,7 @@ import {Dialog, DialogDescription, DialogHeader, DialogTitle, DialogTrigger} fro
 import {Popover, PopoverContent, PopoverTrigger} from "@/components/ui/popover";
 import {TRANSACTION_TYPES, transactionTypeLabel} from "@/lib/transactions";
 import {adjacentTransactionMonth, applyTransactionDate, applyTransactionFilters, transactionDateFilter, transactionDateLabel, transactionFilterCount, type TransactionDateFilter} from "@/lib/transaction-filters";
+import {api} from "@/lib/api";
 
 type Choice = {id: number; name: string};
 type Props = {
@@ -19,6 +21,13 @@ type Props = {
 export default function TransactionFilters({params, accounts, categories, onChange, lockedAccountId}: Props) {
   const dateTitle = useId();
   const [dateOpen, setDateOpen] = useState(false);
+  const dashboard = useQuery({
+    queryKey: ["credit-card-dashboard", "latest-month"],
+    queryFn: () => api<{availableMonths: string[]}>("credit-card-dashboard"),
+    staleTime: 60_000,
+  });
+  const latestStatementMonth = dashboard.data?.availableMonths?.[0];
+
   const [dateDraft, setDateDraft] = useState<TransactionDateFilter>(() => transactionDateFilter(params));
   const [dateError, setDateError] = useState("");
   const [advancedDraft, setAdvancedDraft] = useState<URLSearchParams | null>(null);
@@ -37,7 +46,11 @@ export default function TransactionFilters({params, accounts, categories, onChan
   return <section className="panel mb-5 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3 sm:flex sm:flex-wrap" aria-label="Transaction filters">
     <Popover open={dateOpen} onOpenChange={open => {
       if (open) {
-        setDateDraft(transactionDateFilter(params));
+        const currentFilter = transactionDateFilter(params);
+        if (!params.has("month") && !params.has("start") && !params.has("end") && latestStatementMonth) {
+          currentFilter.month = latestStatementMonth;
+        }
+        setDateDraft(currentFilter);
         setDateError("");
       }
       setDateOpen(open);
@@ -78,9 +91,16 @@ export default function TransactionFilters({params, accounts, categories, onChan
               <option value="all">All time</option>
             </select>
           </label>
-          {dateDraft.mode === "month" && <label className="mt-4 block">Month
-            <input className="field" type="month" value={dateDraft.month} onChange={event => setDateDraft({...dateDraft, month: event.target.value})}/>
-          </label>}
+          {dateDraft.mode === "month" && <div className="mt-4 space-y-2">
+            <label className="block">Month
+              <input className="field" type="month" value={dateDraft.month} onChange={event => setDateDraft({...dateDraft, month: event.target.value})}/>
+            </label>
+            {latestStatementMonth && latestStatementMonth !== dateDraft.month && (
+              <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => setDateDraft({...dateDraft, month: latestStatementMonth})}>
+                Jump to latest statement ({latestStatementMonth})
+              </Button>
+            )}
+          </div>}
           {dateDraft.mode === "range" && <div className="mt-4 grid gap-3">
             <label>Start date<input className="field" type="date" value={dateDraft.start} onChange={event => setDateDraft({...dateDraft, start: event.target.value})}/></label>
             <label>End date<input className="field" type="date" value={dateDraft.end} onChange={event => setDateDraft({...dateDraft, end: event.target.value})}/></label>
