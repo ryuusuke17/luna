@@ -111,13 +111,22 @@ test("account creation defaults date and optional name with concise ShopMore pro
  expect(state.errors).toEqual([]);
 });
 
-test("native account navigation, scoped URL filters, source restoration and ledger totals",async({page})=>{
- const state=await workspace(page);await page.setViewportSize({width:320,height:740});await page.goto("/accounts");
+test("statement-only account navigation, compact URL filters and inline upload views",async({page})=>{
+ const state=await workspace(page),activityRequests:string[]=[];
+ page.on("request",request=>{if(new URL(request.url()).pathname==="/api/transactions")activityRequests.push(request.url());});
+ await page.setViewportSize({width:320,height:740});await page.goto("/accounts");
  await expect(page.getByText("Balance · Apr 2026",{exact:true})).toBeVisible();const link=page.getByRole("link",{name:"View account details for Daily bank"});await expect(link).toHaveAttribute("href","/accounts/1");await link.focus();await page.keyboard.press("Enter");await expect(page).toHaveURL(/\/accounts\/1$/);
- await page.getByLabel("Month",{exact:true}).fill("2026-04");await page.getByRole("button",{name:"View April statement.csv",exact:true}).click();await expect(page.getByRole("region",{name:"Legacy statement source"})).toContainText("123400");await page.getByRole("button",{name:"Close source details"}).click();await expect(page.getByRole("button",{name:"View April statement.csv",exact:true})).toBeFocused();await expect(page.getByLabel("Month",{exact:true})).toHaveValue("2026-04");
- const tabs=page.getByRole("tab",{name:"Statements",exact:true});await tabs.focus();await page.keyboard.press("ArrowRight");await expect(page.getByRole("tab",{name:"Balance/activity"})).toHaveAttribute("aria-selected","true");await expect(page).toHaveURL(/tab=activity&month=2026-04/);
- const closing=page.getByText("Closing ledger balance",{exact:true}).locator("..").getByRole("definition");await expect(closing).toHaveText("₱950.00");await page.getByLabel("Search activity",{exact:true}).fill("missing");await expect(page.getByText("No activity matches this period and search.")).toBeVisible();await expect(closing).toHaveText("₱950.00");await expect(page).toHaveURL(/search=missing/);
- await page.getByLabel("Date from",{exact:true}).fill("2026-03-01");await expect(page.getByLabel("Month",{exact:true})).toHaveValue("");await expect(page).toHaveURL(/start=2026-03-01/);await page.reload();await expect(page.getByLabel("Date from",{exact:true})).toHaveValue("2026-03-01");await page.getByRole("button",{name:"Clear filters",exact:true}).first().click();await expect(page).toHaveURL(/\/accounts\/1\?tab=activity&month=2026-04$/);
- expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);expect(state.writes).toEqual([]);expect(state.errors).toEqual([]);
+ await expect(page.getByRole("tab")).toHaveCount(0);await expect(page.getByText("Ledger balance and activity",{exact:true})).toHaveCount(0);
+ await expect(page.getByLabel("Date from",{exact:true})).not.toBeVisible();
+ await page.getByLabel("Month",{exact:true}).fill("2026-04");const view=page.getByRole("button",{name:"View April statement.csv",exact:true});await view.click();
+ const source=page.getByRole("region",{name:"Legacy statement source"});await expect(source).toContainText("123400");await expect(source.locator("..")).toContainText("April statement.csv");await expect(source.getByText("Legacy reference archives",{exact:true})).toHaveCount(0);
+ await page.getByRole("button",{name:"Close source details"}).click();await expect(view).toBeFocused();await expect(page.getByLabel("Month",{exact:true})).toHaveValue("2026-04");
+ await expect(page.getByRole("link",{name:"Download original April statement.csv",exact:true})).toHaveAttribute("href","/api/statement-archives/8/download");
+ await page.getByLabel("Search statements",{exact:true}).fill("missing");await expect(page.getByText("No statements match these filters.")).toBeVisible();await expect(page).toHaveURL(/search=missing/);
+ await page.getByLabel("Search statements",{exact:true}).fill("");await page.getByText("Custom date range",{exact:true}).focus();await page.keyboard.press("Enter");await page.getByLabel("Date from",{exact:true}).fill("2026-03-01");await expect(page.getByLabel("Month",{exact:true})).toHaveValue("");await expect(page).toHaveURL(/start=2026-03-01/);
+ await page.reload();await expect(page.getByLabel("Date from",{exact:true})).toHaveValue("2026-03-01");await page.getByRole("button",{name:"Clear filters",exact:true}).first().click();await expect(page).toHaveURL(/\/accounts\/1$/);
+ for(const width of [320,640,1200]){await page.setViewportSize({width,height:740});await expect(page.getByLabel("Month",{exact:true})).toBeVisible();await expect(page.getByLabel("Search statements",{exact:true})).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);}
+ await page.goto("/accounts/1?tab=activity&month=2026-04");await expect(page).toHaveURL(/\/accounts\/1\?month=2026-04$/);await expect(page.getByRole("heading",{name:"Statement uploads",exact:true})).toBeVisible();expect(activityRequests).toEqual([]);
+ expect(state.writes).toEqual([]);expect(state.errors).toEqual([]);
  await page.goto("/accounts?id=1");await expect(page).toHaveURL(/\/accounts\/1$/);await expect(page.getByRole("heading",{name:"Daily bank",exact:true})).toBeVisible();
 });
