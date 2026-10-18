@@ -7,6 +7,7 @@ import {Dialog, DialogDescription, DialogHeader, DialogTitle, DialogTrigger} fro
 import {Popover, PopoverContent, PopoverTrigger} from "@/components/ui/popover";
 import {TRANSACTION_TYPES, transactionTypeLabel} from "@/lib/transactions";
 import {adjacentTransactionMonth, applyTransactionDate, applyTransactionFilters, transactionDateFilter, transactionDateLabel, transactionFilterCount, type TransactionDateFilter} from "@/lib/transaction-filters";
+import {statementMonthLabel} from "@/lib/credit-card-dashboard";
 import {api} from "@/lib/api";
 
 type Choice = {id: number; name: string};
@@ -26,7 +27,8 @@ export default function TransactionFilters({params, accounts, categories, onChan
     queryFn: () => api<{availableMonths: string[]}>("credit-card-dashboard"),
     staleTime: 60_000,
   });
-  const latestStatementMonth = dashboard.data?.availableMonths?.[0];
+  const statementMonths = dashboard.data?.availableMonths ?? [];
+  const latestStatementMonth = statementMonths[0];
 
   const [dateDraft, setDateDraft] = useState<TransactionDateFilter>(() => transactionDateFilter(params));
   const [dateError, setDateError] = useState("");
@@ -80,24 +82,34 @@ export default function TransactionFilters({params, accounts, categories, onChan
           }
         }}>
           <h2 id={dateTitle} className="text-lg font-semibold">Date filter</h2>
-          <p className="mb-4 mt-1 text-sm text-muted-foreground">Filter by posted date.</p>
+          <p className="mb-4 mt-1 text-sm text-muted-foreground">Filter by statement month.</p>
           <label className="block">Date mode
             <select className="field" value={dateDraft.mode} onChange={event => {
               setDateDraft({...dateDraft, mode: event.target.value as TransactionDateFilter["mode"]});
               setDateError("");
             }}>
-              <option value="month">Month</option>
+              <option value="month">Monthly statement</option>
               <option value="range">Custom range</option>
               <option value="all">All time</option>
             </select>
           </label>
-          {dateDraft.mode === "month" && <div className="mt-4 space-y-2">
-            <label className="block">Month
+          {dateDraft.mode === "month" && <div className="mt-4 space-y-3">
+            {statementMonths.length > 0 ? (
+              <label className="block">Statement month
+                <select className="field" value={dateDraft.month} onChange={event => setDateDraft({...dateDraft, month: event.target.value})}>
+                  <option value="">Choose statement month</option>
+                  {statementMonths.map(m => (
+                    <option key={m} value={m}>{statementMonthLabel(m)}</option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            <label className="block">{statementMonths.length > 0 ? "Or custom month" : "Month"}
               <input className="field" type="month" value={dateDraft.month} onChange={event => setDateDraft({...dateDraft, month: event.target.value})}/>
             </label>
             {latestStatementMonth && latestStatementMonth !== dateDraft.month && (
               <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => setDateDraft({...dateDraft, month: latestStatementMonth})}>
-                Jump to latest statement ({latestStatementMonth})
+                Jump to latest statement ({statementMonthLabel(latestStatementMonth)})
               </Button>
             )}
           </div>}
