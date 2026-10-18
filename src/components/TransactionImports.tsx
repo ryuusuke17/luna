@@ -34,15 +34,15 @@ export default function TransactionImports({batch,account,onSelectBatch,onLegacy
    onStatus(body.action==="extend-history"?"History extended. Continue import to add eligible transactions.":result.imported===undefined?"File parsed. Continue import to add clear rows.":`${result.imported} imported · ${result.needsAttention} need attention · ${result.linked} already imported${result.error?` · ${result.error}`:""}`);
   }catch(reason){setError((reason as Error).message);}finally{setBusy(false);}
  }
- return <section className="mb-5 min-w-0" aria-label="Transaction imports">
-  <div className="mb-4 flex flex-wrap items-center gap-3">
-   <Button variant={attention?"default":"outline"} aria-pressed={attention} onClick={()=>{setAttention(value=>!value);setHistoryOpen(true);if(!attention&&!pending.length){const next=uploads.find(item=>item.needs_review||item.status==="failed");if(next)onSelectBatch(next.id,next.account_id);}}}>Needs attention ({needsAttention})</Button>
-   {batch&&<span className="break-words text-sm text-muted-foreground">Showing this upload. Use Show all imports to clear this selection.</span>}
-  </div>
-  {(history.error||legacy.error)&&<p role="alert" className="text-destructive">{(history.error??legacy.error)?.message}</p>}
-  {attention&&uploads.length>0&&!uploads.some(item=>item.needs_review||item.status==="failed")&&<p role="status" className="mb-3">No imports need attention.</p>}
+ return <section className="mb-3 min-w-0" aria-label="Transaction imports">
   <details className="panel p-3 sm:p-4 text-sm min-w-0" open={historyOpen} onToggle={event=>setHistoryOpen(event.currentTarget.open)}>
    <summary className="cursor-pointer font-semibold py-1">Import history</summary>
+   <div className="my-2 flex flex-wrap items-center gap-2">
+    <Button size="sm" variant={attention?"default":"outline"} aria-pressed={attention} onClick={()=>{setAttention(value=>!value);if(!attention&&!pending.length){const next=uploads.find(item=>item.needs_review||item.status==="failed");if(next)onSelectBatch(next.id,next.account_id);}}}>Needs attention ({needsAttention})</Button>
+    {batch&&<span className="break-words text-xs text-muted-foreground">Showing this upload. Use Show all imports to clear this selection.</span>}
+   </div>
+   {(history.error||legacy.error)&&<p role="alert" className="text-xs text-destructive">{(history.error??legacy.error)?.message}</p>}
+   {attention&&uploads.length>0&&!uploads.some(item=>item.needs_review||item.status==="failed")&&<p role="status" className="my-2 text-xs text-muted-foreground">No imports need attention.</p>}
    {history.isPending?<p role="status" className="mt-2 text-xs text-muted-foreground">Loading imports...</p>:!uploads.length?<p className="mt-2 text-xs text-muted-foreground">No uploaded files for this account yet.</p>:<ul className="mt-2 max-h-72 overflow-y-auto divide-y divide-border">{uploads.filter(item=>!attention||item.needs_review||item.status==="failed").map(item=><li key={item.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
     <div className="min-w-0 basis-full sm:flex-1"><p className="break-words font-medium text-sm leading-snug">{item.filename}</p><p className="text-xs text-muted-foreground">{item.account_name} - {item.created_at} - {item.imported} imported, {item.matched} linked, {item.skipped??0} skipped, {item.needs_review} need attention{item.status==="failed"?" - File could not be parsed":""}</p></div>
     <div className="flex flex-wrap items-center gap-2"><Button variant="outline" size="sm" onClick={()=>onSelectBatch(item.id,item.account_id)}>View upload #{item.id}</Button><a className="quiet inline-flex min-h-9 items-center text-xs underline" href={`/api/statements/${item.id}/download`} download>Download original</a><RemoveStatementDialog id={item.id} filename={item.filename} disabled={busy||history.isFetching} onRemoved={()=>{onRemoved(item.id);onStatus("Uploaded statement removed. Ledger transactions unchanged.");void client.invalidateQueries({queryKey:["account-detail"]});requestAnimationFrame(()=>document.getElementById("import-result")?.focus());}}/></div>
