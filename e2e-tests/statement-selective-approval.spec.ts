@@ -58,3 +58,24 @@ test("formatting changes require a preview confirmation; cancel saves nothing (m
  await preview();await dialog.getByRole("button",{name:"Confirm formatting and import",exact:true}).focus();await page.keyboard.press("Enter");await expect(dialog).not.toBeVisible();expect(previews).toBe(2);expect(confirmed).toBe(1);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
+
+
+test("uploaded statement removal confirms, cancels safely and protects imported rows (mocked API)",async({page})=>{
+ await importWorkspace(page,true);let removed=false,removals=0,protectedUpload=false;
+ const filename="unapproved-"+"long-".repeat(20)+".csv";
+ await page.route("**/api/statements",async route=>{
+  await route.fulfill({json:removed?[]:[{id:1,account_id:1,account_name:"Daily bank",filename,created_at:"2025-04-12",rows:1,imported:protectedUpload?1:0,matched:0,needs_review:protectedUpload?0:1,status:protectedUpload?"imported":"needs_attention",error:""}]});
+ });
+ await page.route("**/api/statements/1",async route=>{
+  if(route.request().method()==="POST"){expect(route.request().postDataJSON()).toEqual({action:"remove",version:"remove-v1"});removals++;removed=true;await route.fulfill({json:{ok:true}});return;}
+  await route.fulfill({json:{id:1,account_id:1,account_name:"Daily bank",account_type:"bank",filename,status:protectedUpload?"imported":"needs_attention",version:"remove-v1",discrepancies:[],reconciliation:null,entries:[{id:1,index:0,action:protectedUpload?"import":null,row:null,raw:{},blockers:[],candidates:[],warnings:"Invalid calendar date"}]}});
+ });
+ await page.setViewportSize({width:320,height:800});await page.goto("/import-export?tab=history&batch=1&account=1");
+ const opener=page.getByRole("button",{name:"Remove "+filename,exact:true}),dialog=page.getByRole("dialog",{name:"Remove uploaded statement?",exact:true});
+ await opener.focus();await page.keyboard.press("Enter");await expect(dialog.getByRole("button",{name:"Remove statement permanently"})).toBeEnabled();await reviewDialog(dialog);await reviewFocusLoop(page,dialog);
+ await page.keyboard.press("Escape");await expect(dialog).not.toBeVisible();await expect(opener).toBeFocused();expect(removals).toBe(0);
+ protectedUpload=true;await opener.click();await expect(dialog.getByRole("alert")).toContainText("Only unapproved uploads can be removed");await expect(dialog.getByRole("button",{name:"Remove statement permanently"})).toBeDisabled();await dialog.getByRole("button",{name:"Cancel",exact:true}).click();expect(removals).toBe(0);
+ protectedUpload=false;await opener.click();await expect(dialog.getByRole("button",{name:"Remove statement permanently"})).toBeEnabled();await dialog.getByRole("button",{name:"Remove statement permanently"}).focus();await page.keyboard.press("Enter");
+ await expect(dialog).not.toBeVisible();await expect(page).toHaveURL(/tab=history&account=1$/);await expect(page.locator("#import-result")).toHaveText("Uploaded statement removed. Ledger transactions unchanged.");await expect(page.locator("#import-result")).toBeFocused();await expect(opener).toHaveCount(0);expect(removals).toBe(1);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
