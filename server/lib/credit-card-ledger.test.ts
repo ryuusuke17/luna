@@ -1,0 +1,118 @@
+import test,{after} from "node:test";
+import assert from "node:assert/strict";
+import {readFileSync} from "node:fs";
+import {randomUUID} from "node:crypto";
+process.env.LUNA_DB_PATH=":memory:";
+const {db}=await import("./db.ts");
+const {importCreditCardStatement,creditCardStatementDetail,mutateCreditCardStatement,downloadCreditCardStatement,initializeCreditCardSchema}=await import("./credit-card-statements.ts");
+const {creditCardLedgerReview,reviewCreditCardLine,linkCreditCardPayment,creditCardPaymentVersion,creditCardPaymentCandidates,issuedHistoryExtension,extendIssuedHistory}=await import("./credit-card-ledger.ts");
+const {createTransaction,balanceFor,voidTransaction,correctTransaction,transactionVersion,transactionFeedback}=await import("./ledger.ts");
+const {creditCardDashboard}=await import("./credit-card-dashboard.ts");
+const {accountDeletionPreview}=await import("./account-deletion.ts");
+const {accountResetPreview,resetAccounts}=await import("./account-reset.ts");
+const sample=readFileSync(new URL("../../public/unionbank_april_2026_statement_sample.csv",import.meta.url),"utf8");
+db.exec("INSERT INTO users(id,username,password_hash) VALUES(1,'review','hash'),(2,'other','hash'); INSERT INTO accounts(id,owner_id,name,type,opening_date) VALUES(1,1,'Card','credit_card','2025-01-01'),(2,1,'Cash','cash','2025-01-01'),(3,2,'Other','credit_card','2025-01-01'),(4,1,'Foreign','credit_card','2025-01-01')");
+const payload=(text=sample,extra={})=>({filename:"fixture.csv",base64:Buffer.from(text).toString("base64"),cardId:1,currency:"PHP",confirm:true,...extra});
+const statement=importCreditCardStatement(1,payload()).existingId!;
+const lines=creditCardStatementDetail(1,statement).lines;
+const command=(lineId:number,extra={})=>({action:"review-line",lineId,decision:"import",classification:"expense",reason:"",version:creditCardLedgerReview(1,statement,lineId).version,requestKey:randomUUID(),...extra});
+
+test("existing source stays unresolved; equivalent formatting does not duplicate; owner and credit scopes",()=>{
+ assert.equal(balanceFor(1,1),0);assert.equal(creditCardLedgerReview(1,statement,lines[0].id).decision,null);
+ assert.equal(importCreditCardStatement(1,payload('\uFEFF'+sample.replace(/\r?\n/g,'\r\n'))).existingId,statement);
+ assert.throws(()=>creditCardLedgerReview(2,statement,lines[0].id));assert.throws(()=>importCreditCardStatement(1,payload(sample,{cardId:2})));
+ assert.equal(creditCardDashboard(2).total,0);assert.equal(creditCardDashboard(1,{cards:'2'}).total,0);
+ assert.equal(creditCardDashboard(1,{lineAmount:'1292.00',lineCurrency:'PHP'}).activity.total,1);
+ assert.equal(creditCardDashboard(1,{lineAmount:'-11200.00',lineCurrency:'PHP'}).activity.total,1);
+ assert.throws(()=>creditCardDashboard(1,{lineAmount:'1e3',lineCurrency:'PHP'}));assert.throws(()=>creditCardDashboard(1,{start:'2026-02-30'}));
+ assert.equal(creditCardDashboard(1,{lineSearch:'%'}).activity.total,0);
+});
+test("PHP approval atomic, retries once, provenance and reserved voided identity",()=>{
+ const l=lines[0],v=command(l.id),before=downloadCreditCardStatement(1,statement).bytes;
+ db.exec("CREATE TRIGGER review_failure BEFORE INSERT ON audit_events WHEN NEW.action='credit-card.review' BEGIN SELECT RAISE(ABORT,'review rollback'); END");
+ assert.throws(()=>reviewCreditCardLine(1,statement,v),/review rollback/);assert.equal(balanceFor(1,1),0);assert.equal(creditCardLedgerReview(1,statement,l.id).decision,null);db.exec("DROP TRIGGER review_failure");
+ reviewCreditCardLine(1,statement,v);reviewCreditCardLine(1,statement,v);
+ assert.equal(balanceFor(1,1),-l.source.amountSigned);const d=creditCardLedgerReview(1,statement,l.id).decision!;
+ assert.equal(transactionFeedback(1,d.transactionId!).source,"import");assert.throws(()=>reviewCreditCardLine(1,statement,{...v,reason:'changed'}),/Request key/);
+ voidTransaction(1,d.transactionId!);assert.equal(creditCardLedgerReview(1,statement,l.id).decision?.valid,false);
+ assert.throws(()=>reviewCreditCardLine(1,statement,command(l.id)),/reserved/);assert.equal(balanceFor(1,1),0);
+ assert.deepEqual(downloadCreditCardStatement(1,statement).bytes,before);
+});
+test("manual candidates, fresh transaction versions, explicit matches and correction chains",()=>{
+ const l=lines[1],input={kind:'expense' as const,date:l.source.postDate,amount:l.source.amountSigned,accountId:1,merchant:l.source.merchantRaw,idempotencyKey:randomUUID()};
+ const existing=createTransaction(1,input),state=creditCardLedgerReview(1,statement,l.id);
+ assert.equal(state.candidates[0].id,existing.id);assert.throws(()=>reviewCreditCardLine(1,statement,command(l.id)),/Similar ledger/);
+ assert.throws(()=>reviewCreditCardLine(1,statement,command(l.id,{decision:'link',transactionId:existing.id,transactionVersion:'0'.repeat(64)})),/changed or incompatible/);
+ reviewCreditCardLine(1,statement,command(l.id,{decision:'link',transactionId:existing.id,transactionVersion:transactionVersion(1,existing.id)}));
+ assert.equal(creditCardLedgerReview(1,statement,l.id).decision?.transactionId,existing.id);
+ const replacement=correctTransaction(1,existing.id,{...input,amount:input.amount+1,idempotencyKey:randomUUID()},transactionVersion(1,existing.id));
+ assert.equal(transactionFeedback(1,replacement.id).source,"import");
+ assert.equal((transactionFeedback(1,replacement.id).issued[0] as {original_transaction_id:number}).original_transaction_id,existing.id);
+ const changed=creditCardLedgerReview(1,statement,l.id);assert.equal(changed.decision?.resolvedTransactionId,replacement.id);assert.equal(changed.decision?.valid,false);
+ assert.throws(()=>reviewCreditCardLine(1,statement,command(l.id)),/reserved/);
+ reviewCreditCardLine(1,statement,command(l.id,{decision:'skip',classification:'excluded',reason:'Corrected ledger amount differs; retained as reference'}));
+});
+test("negative source needs classification; payment uses one transfer and tracker never double-counts",()=>{
+ const l=lines.find(l=>l.source.amountSigned<0)!;
+ assert.throws(()=>reviewCreditCardLine(1,statement,command(l.id)),/Classify/);
+ assert.throws(()=>reviewCreditCardLine(1,statement,command(l.id,{classification:'payment',fundingAccountId:3})),/funding/);
+ const before=balanceFor(1,1);reviewCreditCardLine(1,statement,command(l.id,{classification:'payment',fundingAccountId:2}));
+ const decision=creditCardLedgerReview(1,statement,l.id).decision!,transfer=decision.transactionId!;
+ assert.equal(balanceFor(1,1),before-l.source.amountSigned);assert.equal(balanceFor(1,2),l.source.amountSigned);
+ assert.equal((db.prepare('SELECT COUNT(*) n FROM account_entries WHERE transaction_id=?').get(transfer) as {n:number}).n,2);
+ mutateCreditCardStatement(1,statement,{action:'payment',data:{cardId:1,currency:'PHP',date:l.source.postDate,amount:'11200.00',sourceAccountId:2,reference:'Receipt',notes:'',requestKey:randomUUID()}});
+ const p=creditCardStatementDetail(1,statement).payments[0];const balance=balanceFor(1,1);
+ linkCreditCardPayment(1,statement,{action:'link-payment',paymentId:p.id,transactionId:transfer,transactionVersion:transactionVersion(1,transfer),version:creditCardPaymentVersion(1,p.id)});
+ assert.equal(balanceFor(1,1),balance);assert.equal(creditCardStatementDetail(1,statement).payments[0].transaction_id,transfer);
+ assert.throws(()=>accountDeletionPreview(1,2),/protected/);
+ voidTransaction(1,transfer);assert.equal(creditCardStatementDetail(1,statement).payments[0].transaction_id,null);
+});
+test("foreign evidence matches preserved conversion only; archived history is read-only",()=>{
+ const id=importCreditCardStatement(1,payload(sample,{cardId:4,currency:'USD',acknowledge:true,reviewNote:'Independent foreign fixture'})).existingId!;
+ const l=creditCardStatementDetail(1,id).lines[0];const state=creditCardLedgerReview(1,id,l.id);
+ const base={action:'review-line',lineId:l.id,decision:'import',classification:'expense',reason:'',version:state.version,requestKey:randomUUID()};
+ assert.throws(()=>reviewCreditCardLine(1,id,base),/Foreign/);
+ const t=createTransaction(1,{kind:'expense',date:l.source.postDate,amount:1,accountId:4,originalCurrency:'USD',originalAmount:l.source.amountSigned,exchangeRate:'56',idempotencyKey:randomUUID()});
+ reviewCreditCardLine(1,id,{...base,decision:'link',transactionId:t.id,transactionVersion:transactionVersion(1,t.id)});
+ assert.equal(creditCardLedgerReview(1,id,l.id).decision?.valid,true);
+ db.prepare("UPDATE accounts SET archived_at=CURRENT_TIMESTAMP WHERE id=4").run();
+ assert.equal(creditCardDashboard(1,{cards:'4'}).total,1);assert.equal(creditCardLedgerReview(1,id,l.id).readOnly,true);
+ assert.throws(()=>importCreditCardStatement(1,payload(sample,{cardId:4,currency:'USD'})),/active/);
+ assert.deepEqual(db.pragma('foreign_key_check'),[]);
+});
+test("issued history extension preserves evidence, blocks conflicts, rolls back audit and rejects stale versions",()=>{
+ db.exec("INSERT INTO accounts(id,owner_id,name,type,opening_date) VALUES(5,1,'Historical card','credit_card','2026-04-01')");
+ const sid=importCreditCardStatement(1,payload(sample,{cardId:5,acknowledge:true,reviewNote:'Independent historical fixture'})).existingId!;
+ const bytes=downloadCreditCardStatement(1,sid).bytes,rows=db.prepare("SELECT * FROM cc_statement_lines WHERE statement_id=?").all(sid);
+ let ext=issuedHistoryExtension(1,sid)!;assert.equal(ext.allowed,true);assert.ok(ext.affectedRows>0);
+ assert.throws(()=>extendIssuedHistory(2,sid,{action:'extend-history',version:ext.version}),/unavailable/);
+ const opening=createTransaction(1,{kind:'opening',date:'2026-04-01',amount:100,accountId:5,idempotencyKey:randomUUID()});
+ assert.match(issuedHistoryExtension(1,sid)!.conflict,/opening-balance/);voidTransaction(1,opening.id);
+ db.prepare("UPDATE accounts SET archived_at=CURRENT_TIMESTAMP WHERE id=5").run();assert.equal(issuedHistoryExtension(1,sid)!.allowed,false);db.prepare("UPDATE accounts SET archived_at=NULL WHERE id=5").run();
+ ext=issuedHistoryExtension(1,sid)!;
+ db.exec("CREATE TRIGGER extension_failure BEFORE INSERT ON audit_events WHEN NEW.action='credit-card.extend-history' BEGIN SELECT RAISE(ABORT,'extension rollback'); END");
+ assert.throws(()=>extendIssuedHistory(1,sid,{action:'extend-history',version:ext.version}),/extension rollback/);db.exec('DROP TRIGGER extension_failure');
+ assert.equal(issuedHistoryExtension(1,sid)!.openingDate,'2026-04-01');
+ extendIssuedHistory(1,sid,{action:'extend-history',version:ext.version});assert.equal(issuedHistoryExtension(1,sid),null);
+ assert.throws(()=>extendIssuedHistory(1,sid,{action:'extend-history',version:ext.version}),/Reload/);
+ assert.equal(balanceFor(1,5),0);assert.deepEqual(downloadCreditCardStatement(1,sid).bytes,bytes);assert.deepEqual(db.prepare("SELECT * FROM cc_statement_lines WHERE statement_id=?").all(sid),rows);
+});
+test("payment candidates include seven-day boundaries, exclude eight days and preserve funding identity",()=>{
+ mutateCreditCardStatement(1,statement,{action:'payment',data:{cardId:1,currency:'PHP',date:'2026-04-15',amount:'19.00',sourceAccountId:2,reference:'Seven day fixture',notes:'',requestKey:randomUUID()}});
+ const p=creditCardStatementDetail(1,statement).payments.find((p:any)=>p.reference==='Seven day fixture')!;
+ const ids=['2026-04-08','2026-04-22','2026-04-07','2026-04-23'].map(date=>createTransaction(1,{kind:'transfer',date,amount:1900,accountId:2,counterAccountId:1,idempotencyKey:randomUUID()}).id);
+ assert.deepEqual(creditCardPaymentCandidates(1,statement,p.id).map(t=>t.id).sort((a,b)=>a-b),ids.slice(0,2));
+ assert.throws(()=>creditCardPaymentCandidates(2,statement,p.id),/unavailable/);
+});
+test("repeated additive initialization preserves every source, decision, payment and ledger row",()=>{
+ const tables=['cc_statements','cc_statement_lines','cc_line_decisions','cc_payments','cc_allocations','transactions','account_entries'];
+ const snapshot=()=>tables.map(t=>db.prepare('SELECT * FROM '+t+' ORDER BY rowid').all());const before=snapshot();
+ for(let i=0;i<20;i++)initializeCreditCardSchema();
+ assert.deepEqual(snapshot(),before);assert.deepEqual(db.pragma('foreign_key_check'),[]);assert.equal(db.pragma('integrity_check',{simple:true}),'ok');
+});
+test("reset understands new dependencies and preserves other owners",()=>{
+ const preview=accountResetPreview(1);assert.ok(preview.counts.cc_line_decisions>0);
+ resetAccounts(1,{confirmation:'DELETE ALL ACCOUNTS',version:preview.version});
+ assert.equal(accountResetPreview(1).counts.cc_line_decisions,0);assert.ok(db.prepare('SELECT 1 FROM accounts WHERE id=3').get());assert.deepEqual(db.pragma('foreign_key_check'),[]);
+});
+after(()=>db.close());

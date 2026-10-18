@@ -44,9 +44,9 @@ test("period summaries include incoming/outgoing transfers, exclude voids, ignor
   createTransaction(owner,{kind:"transfer",accountId:card,counterAccountId:account,date:"2025-02-03",amount:50,idempotencyKey:"details-in"});
   const voided=createTransaction(owner,{kind:"expense",accountId:account,date:"2025-02-04",amount:500,idempotencyKey:"details-void"});voidTransaction(owner,voided.id);
   const result=accountDetails(owner,account,{month:"2025-02"})!;
-  assert.deepEqual(result.period,{month:"2025-02",start:"2025-02-01",end:"2025-02-28",opening:1000,closing:950,inflows:50,outflows:100});
+  assert.deepEqual(result.period,{month:"2025-02",start:"2025-02-01",end:"2025-02-28",opening:1000,closing:950,inflows:50,outflows:100,income:0,expenses:0,transfersIn:50,transfersOut:100});
   assert.deepEqual(accountDetails(owner,account,{month:"2025-02",search:"no match",page:"3"})!.period,result.period);
-  assert.equal(accountDetails(owner,account,{tab:"activity"})!.period.month,"2025-02");
+  assert.equal(accountDetails(owner,account,{tab:"activity"})!.period.month,null);
 });
 test("summary cards use cash/wallet ledger only and signed currency-separated credit-card snapshots",async()=>{
  const {accountSummary}=await import("../../src/lib/accounts.ts");

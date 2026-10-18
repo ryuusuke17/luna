@@ -59,12 +59,11 @@ export function accountDetails(owner:number, id:number, input:unknown): AccountD
   const f=parseAccountFilters(input);
   const record=db.prepare("SELECT * FROM accounts WHERE owner_id=? AND id=?").get(owner,id) as Omit<Account,"balance"> | undefined;
   if (!record) return null;
-  const history=accountHistory(owner,id),display=selectAccountDisplay(history);
+  const history=accountHistory(owner,id),display=selectAccountDisplay(record.type==="credit_card"?history.filter(s=>s.source==="issued"):[]);
   let month=f.month??null,start=f.start??null,end=f.end??null;
-  if(f.tab==="activity"&&!month&&!start&&!end) month=(db.prepare("SELECT substr(MAX(t.posted_date),1,7) month FROM transactions t JOIN account_entries e ON e.transaction_id=t.id WHERE t.owner_id=? AND e.account_id=? AND t.voided_at IS NULL").get(owner,id) as {month:string|null}).month;
   if(month){start=`${month}-01`;const next=new Date(`${start}T00:00:00Z`);next.setUTCMonth(next.getUTCMonth()+1);next.setUTCDate(0);end=next.toISOString().slice(0,10);}
   const before=start?new Date(`${start}T00:00:00Z`):null;if(before)before.setUTCDate(before.getUTCDate()-1);
-  const totals=db.prepare(`SELECT COALESCE(SUM(MAX(e.delta,0)),0) inflows,COALESCE(SUM(MAX(-e.delta,0)),0) outflows FROM account_entries e JOIN transactions t ON t.id=e.transaction_id WHERE t.owner_id=? AND e.account_id=? AND t.voided_at IS NULL AND (? IS NULL OR t.posted_date>=?) AND (? IS NULL OR t.posted_date<=?)`).get(owner,id,start,start,end,end) as {inflows:number;outflows:number};
+  const totals=db.prepare(`SELECT COALESCE(SUM(MAX(e.delta,0)),0) inflows,COALESCE(SUM(MAX(-e.delta,0)),0) outflows,COALESCE(SUM(CASE WHEN t.kind='income' THEN e.delta ELSE 0 END),0) income,COALESCE(SUM(CASE WHEN t.kind='expense' THEN -e.delta ELSE 0 END),0) expenses,COALESCE(SUM(CASE WHEN t.kind='transfer' AND e.delta>0 THEN e.delta ELSE 0 END),0) transfersIn,COALESCE(SUM(CASE WHEN t.kind='transfer' AND e.delta<0 THEN -e.delta ELSE 0 END),0) transfersOut FROM account_entries e JOIN transactions t ON t.id=e.transaction_id WHERE t.owner_id=? AND e.account_id=? AND t.voided_at IS NULL AND (? IS NULL OR t.posted_date>=?) AND (? IS NULL OR t.posted_date<=?)`).get(owner,id,start,start,end,end) as {inflows:number;outflows:number};
   const filtered=history.filter(s=>(!start||s.date!==null&&s.date>=start)&&(!end||s.date!==null&&s.date<=end)&&(!f.search||`${s.filename} ${s.source} ${s.status}`.toLowerCase().includes(f.search.toLowerCase())));
   const page=Number(f.page??1),pageSize=25;
   return {account:{...record,balance:balanceFor(owner,id),display},history:{items:filtered.slice((page-1)*pageSize,page*pageSize),total:filtered.length,page,pageSize},period:{month,start,end,opening:before?balanceFor(owner,id,before.toISOString().slice(0,10)):0,closing:balanceFor(owner,id,end??undefined),...totals}};

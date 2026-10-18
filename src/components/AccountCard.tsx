@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { Banknote, CreditCard, Landmark, Wallet, HandCoins, Boxes, Scale } from "lucide-react";
 import { formatMoney } from "@/lib/finance";
-import { accountLabels, balanceCaption, utilization, type Account } from "@/lib/accounts";
+import { accountLabels, debtAccount, utilization, type Account } from "@/lib/accounts";
 import { issuerLogo, networkLogo } from "@/lib/account-logos";
 import "./AccountCard.css";
 export type { Account } from "@/lib/accounts";
@@ -19,8 +19,11 @@ export default function AccountCard({ account }: { account: Account }) {
     <div className="min-w-0"><AccountIdentity account={account}/><h3 className="mt-1"><Link className="luna-account-title" to={`/accounts/${account.id}`} aria-label={`View account details for ${account.name}`}>{account.name}</Link></h3><p className="break-words text-xs">{[accountLabels[account.type],account.issuer,account.product].filter(Boolean).join(" · ")}</p></div>
     {isCard&&account.last4&&<p className="luna-account-number flex flex-wrap gap-x-2" aria-label={`Card ending in ${account.last4}`}><span aria-hidden>{account.type==="credit_card"?"•••• •••• ••••":"••••"}</span><span aria-hidden>{account.last4}</span></p>}
     <div className="mt-auto flex min-w-0 flex-wrap items-end gap-3">
-      <div className="min-w-0 flex-1 basis-40"><p className="text-xs">{balanceCaption(account.display)}</p>
-        {account.display?.source==="statement"?account.display.snapshots.map(s=><div key={s.id}><p className="luna-account-balance mt-1">{formatMoney(s.amount!,s.currency)}</p>{(s.semantics!=="debt-positive"||s.amount!<0)&&<p className="text-xs">{s.semantics==="debt-positive"?"Statement credit balance":"Statement closing balance"}</p>}</div>):<p className="luna-account-balance mt-1">{formatMoney(account.balance)}</p>}
+      <div className="min-w-0 flex-1 basis-40"><p className="text-xs">{debtAccount(account.type)?account.balance>0?"Recorded credit balance":"Outstanding ledger debt":"Current recorded ledger balance"}</p>
+        <p className="luna-account-balance mt-1">{formatMoney(debtAccount(account.type)?Math.abs(account.balance):account.balance)}</p>
+        {account.type==="credit_card"&&<><p className="mt-2 text-xs">Credit limit: {account.credit_limit?formatMoney(account.credit_limit):"Unknown"}</p><p className="text-xs">Estimated available credit: {account.credit_limit?formatMoney(account.credit_limit+account.balance):"Unknown"}</p>{account.credit_limit&&-account.balance>account.credit_limit?<p className="text-xs">Over limit by {formatMoney(-account.balance-account.credit_limit)}</p>:null}</>}
+        {account.type==="credit_card"&&account.display?.snapshots.map(s=><p key={s.id} className="mt-2 text-xs">Statement snapshot · {s.date}: {formatMoney(s.amount!,s.currency)}</p>)}
+
       </div>
       {isCard&&account.network&&<span className="ml-auto flex h-10 max-w-full shrink-0 items-end justify-end">{network?<img src={network} alt={account.network} className="max-h-full w-16 object-contain object-right-bottom"/>:<span className="max-w-24 break-words text-right text-sm">{account.network}</span>}</span>}
     </div>

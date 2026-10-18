@@ -25,6 +25,8 @@ async function workspace(page:Page){
   else if(path==="budgets")result=[{id:1,name:"Food plan",month,category_id:1,amount:25000,actual:10000,category_name:"Food",kind:"expense"}];
   else if(path==="bills")result=[{id:1,name:"Phone plan",amount:15000,due_date:month+"-28",account_id:1,account_name:"Daily bank",category_id:1,category_name:"Food",cadence:"monthly",notes:"",transaction_id:null,payment_kind:"expense"}];
   else if(path==="goals")result=[{id:1,version:"goal-version",name:"Emergency fund",target:500000,allocated:150000,due_date:null,notes:"Three months of essentials",contributions:[{id:1,amount:150000,posted_date:date,notes:"First allocation"}]}];
+  else if(path==="credit-card-statements")result={items:[],total:0,page:1,pageSize:25,issuers:[],allCards:accounts.filter(a=>a.type==="credit_card")};
+  else if(path==="credit-card-dashboard")result={items:[],total:0,page:1,pageSize:25,availableMonths:[],issuers:[],allCards:[],activity:{items:[],total:0,page:1,pageSize:25,categories:[]}};
   else if(path==="statement-archives")result={items:[],total:0,page:1,pageSize:20,issuers:[]};
   else if(path==="search")result=[{type:"account",id:1,label:"Daily bank",detail:"Bank account"}];
   else if(path==="reports")result={month,assets:150000,liabilities:20000,netWorth:130000,income:200000,expenses:10000,cashFlow:{amount:190000},categories:[{name:"Food",amount:10000}],merchants:[{name:"Neighbourhood market",amount:10000}],daily:[],comparison:[],coverage:[]};

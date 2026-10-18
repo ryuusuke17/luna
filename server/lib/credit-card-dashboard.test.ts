@@ -10,20 +10,20 @@ const sample=readFileSync(new URL("../../public/unionbank_april_2026_statement_s
 const payload=(cardId:number,text=sample,extra={})=>({cardId,filename:"fixture.csv",currency:"PHP",base64:Buffer.from(text).toString("base64"),...extra});
 const ledger=()=>["accounts","transactions","account_entries","statement_archives","statements","statement_imports","statement_import_rows","statement_entries","statement_decisions","statement_payment_allocations"].map(table=>db.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all());
 
-test("dashboard: full fixture, newest issued month, unified activity, isolation, payments and preserved sources",()=>{
+test("dashboard: full fixture, all issued months, unified activity, isolation, payments and preserved sources",()=>{
  db.exec("INSERT INTO users(id,username,password_hash) VALUES(1,'dashboard-owner','test'),(2,'dashboard-other','test'); INSERT INTO accounts(id,owner_id,name,type,opening_date,issuer,last4) VALUES(1,1,'Primary','credit_card','2026-01-01','UnionBank','1234'),(2,1,'Second','credit_card','2026-01-01','UnionBank','5678'),(3,1,'Unknown one','credit_card','2026-01-01','UnionBank',NULL),(4,1,'Unknown two','credit_card','2026-01-01','UnionBank',NULL),(5,2,'Other owner','credit_card','2026-01-01','UnionBank','9999')");
  const before=ledger(),empty=creditCardDashboard(1);
  assert.equal(empty.selectedMonth,null);assert.deepEqual(empty.availableMonths,[]);assert.deepEqual(empty.metrics,[]);assert.equal(empty.activity.total,0);assert.equal(empty.cards.length,4);assert.deepEqual(empty.diagnostics.ambiguousCards,[3,4]);
  assert.ok(importCreditCardStatement(1,payload(1)).preview);assert.equal(creditCardDashboard(1).diagnostics.issued.total,0);
  const imported=importCreditCardStatement(1,payload(1,sample,{confirm:true})),id=imported.existingId!;
  const april=creditCardDashboard(1);
- assert.equal(april.selectedMonth,"2026-04");assert.deepEqual(april.availableMonths,["2026-04"]);assert.equal(april.activity.total,13);assert.equal(april.activity.items.length,13);assert.equal(april.diagnostics.lines,13);
+ assert.equal(april.selectedMonth,null);assert.deepEqual(april.availableMonths,["2026-04"]);assert.equal(april.activity.total,13);assert.equal(april.activity.items.length,13);assert.equal(april.diagnostics.lines,13);
  assert.deepEqual(april.metrics[0],{currency:"PHP",statements:1,cards:1,originalBalance:1496931,minimumDue:88145,applied:0,remaining:1496931,newCharges:1505142});
  const lines=april.activity.items as {id:number;statement_id:number;statement_month:string;issuer:string;card_id:number;amount:number;funding_source:string|null;source:{saleDate:string;merchantRaw:string};type_override:string|null;display_category:string}[];
  assert.ok(lines.every(l=>l.statement_id===id&&l.statement_month==="2026-04"&&l.issuer==="UnionBank"&&l.card_id===1));assert.ok(lines.some(l=>l.source.saleDate.startsWith("2026-03")));
  assert.equal(lines.filter(l=>l.amount>0).reduce((sum,l)=>sum+l.amount,0),1505142);assert.equal(lines.filter(l=>l.amount<0).reduce((sum,l)=>sum+l.amount,0),-1120000);assert.equal(lines.find(l=>l.amount<0)?.funding_source,null);
  assert.equal(creditCardDashboard(1,{month:"2026-03"}).selectedMonth,"2026-03");assert.equal(creditCardDashboard(1,{month:"2026-03"}).activity.total,0);assert.deepEqual(creditCardDashboard(1,{month:"2026-03"}).metrics,[]);
- assert.equal(april.cards.find(c=>c.id===2)?.selectedMonth,null);assert.equal(april.cards.find(c=>c.id===2)?.selectedMonthCount,0);
+ assert.equal(april.cards.find(c=>c.id===2)?.selectedMonth,null);assert.equal(april.cards.find(c=>c.id===2)?.selectedMonthCount,null);
  assert.equal(creditCardDashboard(1,{issuer:"UnionBank",cards:"1",month:"2026-04"}).activity.total,13);assert.equal(creditCardDashboard(1,{issuer:"Other",cards:"1",month:"2026-04"}).activity.total,0);
  assert.equal(creditCardDashboard(1,{month:"2026-04",lineSearch:"UNIQLO SM FAIRVIEW"}).activity.total,1);assert.equal(creditCardDashboard(1,{month:"2026-04",lineType:"credit"}).activity.total,1);
  assert.equal(creditCardDashboard(1,{month:"2026-04",start:"2026-05-01"}).activity.total,0);assert.equal(creditCardDashboard(1,{dueStart:"2026-05-01"}).total,0);
@@ -39,13 +39,13 @@ test("dashboard: full fixture, newest issued month, unified activity, isolation,
  const firstPage=creditCardDashboard(1,{lineSort:"amount"}).activity.items as {id:number;amount:number}[],secondPage=creditCardDashboard(1,{lineSort:"amount",linePage:"2"}).activity.items as {id:number;amount:number}[];
  assert.equal(new Set([...firstPage,...secondPage].map(l=>l.id)).size,26);assert.ok(firstPage.every((l,i)=>i===0||firstPage[i-1].amount>=l.amount));
  const may=sample.replace("April 2026","May 2026").replace('Statement date,"Apr 7, 2026"','Statement date,"May 7, 2026"').replace('Due date,"Apr 24, 2026"','Due date,"May 24, 2026"');
- importCreditCardStatement(1,payload(1,may,{confirm:true}));assert.equal(creditCardDashboard(1).selectedMonth,"2026-05");assert.equal(creditCardDashboard(1).activity.total,13);assert.equal(creditCardDashboard(1,{month:"2026-04"}).activity.total,26);
- assert.equal(creditCardDashboard(1,{year:"2025"}).selectedMonth,"2025-01");assert.deepEqual(creditCardDashboard(1,{year:"2025"}).metrics,[]);
+ importCreditCardStatement(1,payload(1,may,{confirm:true}));assert.equal(creditCardDashboard(1).selectedMonth,null);assert.equal(creditCardDashboard(1).activity.total,39);assert.equal(creditCardDashboard(1,{month:"2026-04"}).activity.total,26);
+ assert.equal(creditCardDashboard(1,{year:"2025"}).selectedMonth,null);assert.deepEqual(creditCardDashboard(1,{year:"2025"}).metrics,[]);
  const corrected=may.replace("Statement notes,","Statement notes,Reviewed replacement"),mayId=creditCardDashboard(1).items[0].id;
- importCreditCardStatement(1,payload(1,corrected,{confirm:true,supersedesId:mayId}));assert.equal(creditCardDashboard(1).activity.total,13);assert.equal(creditCardDashboard(1).diagnostics.issued.total,4);assert.equal(creditCardDashboard(1).diagnostics.issued.active,3);
+ importCreditCardStatement(1,payload(1,corrected,{confirm:true,supersedesId:mayId}));assert.equal(creditCardDashboard(1).activity.total,39);assert.equal(creditCardDashboard(1).diagnostics.issued.total,4);assert.equal(creditCardDashboard(1).diagnostics.issued.active,3);
  assert.deepEqual(ledger(),before);
  assert.equal(creditCardDashboard(2).diagnostics.issued.total,0);assert.equal(creditCardDashboard(2).diagnostics.lines,0);assert.equal(creditCardDashboard(2).cards.length,1);assert.deepEqual(creditCardDashboard(2).diagnostics.issues,[]);
- importCreditCardStatement(2,payload(5,sample,{confirm:true}));assert.equal(creditCardDashboard(2).activity.total,13);assert.equal(creditCardDashboard(1).activity.total,13);assert.ok(creditCardDashboard(1).diagnostics.issues.every(i=>(i as {card_id:number}).card_id!==5));
+ importCreditCardStatement(2,payload(5,sample,{confirm:true}));assert.equal(creditCardDashboard(2).activity.total,13);assert.equal(creditCardDashboard(1).activity.total,39);assert.ok(creditCardDashboard(1).diagnostics.issues.every(i=>(i as {card_id:number}).card_id!==5));
  const backend=readFileSync(new URL("./credit-card-dashboard.ts",import.meta.url),"utf8");assert.doesNotMatch(backend,/(?:INSERT INTO|UPDATE|DELETE FROM|ALTER TABLE|CREATE TABLE)\s/i);
 });
 after(()=>db.close());

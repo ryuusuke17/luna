@@ -18,6 +18,7 @@ const scopes = [
  ["statement_archives","owner_id=? AND account_id IS NOT NULL"],
  ["cc_statements","owner_id=?"],
  ["cc_statement_lines","statement_id IN (SELECT id FROM cc_statements WHERE owner_id=?)"],
+ ["cc_line_decisions","line_id IN (SELECT l.id FROM cc_statement_lines l JOIN cc_statements s ON s.id=l.statement_id WHERE s.owner_id=?)"],
  ["cc_line_annotations","line_id IN (SELECT l.id FROM cc_statement_lines l JOIN cc_statements s ON s.id=l.statement_id WHERE s.owner_id=?)"],
  ["cc_payments","owner_id=?"],
  ["cc_allocations","payment_id IN (SELECT id FROM cc_payments WHERE owner_id=?)"],
@@ -47,7 +48,7 @@ export function resetAccounts(owner:number,input:unknown){
     const bytes=readFileSync(path);unlinkSync(path);removed.push({path,bytes});
    }catch(error){if((error as NodeJS.ErrnoException).code!=="ENOENT")throw error;}
   }
-  const deleteTables=["cc_payment_evidence","cc_allocations","cc_line_annotations","cc_statement_lines"];
+  const deleteTables=["cc_payment_evidence","cc_allocations","cc_line_decisions","cc_line_annotations","cc_statement_lines"];
   for(const table of deleteTables){const scope=scopes.find(([name])=>name===table)!;db.prepare(`DELETE FROM ${scope[0]} WHERE ${scope[1]}`).run(owner);}
   db.prepare("UPDATE cc_statements SET supersedes_id=NULL,superseded_by=NULL WHERE owner_id=?").run(owner);
   for(const table of ["cc_statements","cc_payments","statement_payment_allocations","reconciliations","statement_decisions","statement_entries","statements","statement_archives","bill_payments","bills","statement_import_rows","csv_import_rows","statement_imports","csv_import_batches","account_entries"]){

@@ -1,3 +1,4 @@
+import "./credit-card-statements.ts";
 import {createHash} from "node:crypto";
 import { atomic,db } from "./db.ts";
 import { isCalendarDate,MAX_MINOR,convertToPHP,validatedRate,currencyDigits } from "../../src/lib/finance.ts";
@@ -52,16 +53,27 @@ export function transactionVersion(owner:number,id:number):string {
  const dependencies=["bill_payments","statement_import_rows","csv_import_rows"].map(table=>db.prepare("SELECT * FROM "+table+" WHERE owner_id=? AND transaction_id=?").all(owner,id));
  dependencies.push(db.prepare("SELECT * FROM statement_payment_allocations WHERE owner_id=? AND transaction_id=?").all(owner,id));
  dependencies.push(db.prepare("SELECT d.*,r.state FROM statement_decisions d JOIN statements s ON s.id=d.statement_id LEFT JOIN reconciliations r ON r.statement_id=s.id WHERE s.owner_id=? AND d.transaction_id=?").all(owner,id));
+ dependencies.push(db.prepare("SELECT d.* FROM cc_line_decisions d JOIN cc_decision_projection p ON p.line_id=d.line_id WHERE p.owner_id=? AND p.resolved_transaction_id=?").all(owner,id));
+ dependencies.push(db.prepare("SELECT * FROM cc_payments WHERE owner_id=? AND transaction_id=?").all(owner,id));
  return createHash("sha256").update(JSON.stringify([row,dependencies])).digest("hex");
 }
 export function transactionFeedback(owner:number,id:number){
  const record=db.prepare("SELECT kind,is_installment,description,merchant,notes FROM transactions WHERE owner_id=? AND id=?").get(owner,id) as {kind:string;is_installment:number|null;description:string;merchant:string;notes:string};
- const source=Boolean(db.prepare("SELECT 1 FROM csv_import_rows WHERE owner_id=? AND transaction_id=? UNION SELECT 1 FROM statement_import_rows WHERE owner_id=? AND transaction_id=? UNION SELECT 1 FROM statement_decisions d JOIN statements s ON s.id=d.statement_id WHERE s.owner_id=? AND d.transaction_id=?").get(owner,id,owner,id,owner,id));
+ const issued=db.prepare("SELECT s.id,s.card_id account_id,s.filename,l.id line_id,p.original_transaction_id,p.resolved_transaction_id FROM cc_decision_projection p JOIN cc_statement_lines l ON l.id=p.line_id JOIN cc_statements s ON s.id=l.statement_id WHERE p.owner_id=? AND p.resolved_transaction_id=?").all(owner,id);
+ const source=issued.length>0||Boolean(db.prepare("SELECT 1 FROM csv_import_rows WHERE owner_id=? AND transaction_id=? UNION SELECT 1 FROM statement_import_rows WHERE owner_id=? AND transaction_id=? UNION SELECT 1 FROM statement_decisions d JOIN statements s ON s.id=d.statement_id WHERE s.owner_id=? AND d.transaction_id=?").get(owner,id,owner,id,owner,id));
  const reconciled=Boolean(db.prepare("SELECT 1 FROM transactions t JOIN account_entries e ON e.transaction_id=t.id JOIN reconciliations r ON r.account_id=e.account_id AND r.owner_id=t.owner_id WHERE t.owner_id=? AND t.id=? AND r.state='finalized' AND t.posted_date BETWEEN r.period_start AND r.period_end").get(owner,id));
  const imports=(db.prepare("SELECT s.id,s.account_id,s.filename,e.raw_json FROM statement_decisions d JOIN statement_entries e ON e.id=d.entry_id JOIN statements s ON s.id=e.statement_id WHERE s.owner_id=? AND d.transaction_id=? ORDER BY s.id").all(owner,id) as {id:number;account_id:number;filename:string;raw_json:string}[]).map(({raw_json,...item})=>({...item,raw:JSON.parse(raw_json)}));
- return{...transactionText(record,imports.map(item=>item.raw)),is_installment:transactionType(record)==="installment"?1:0,imports,source:source?"import":"manual",reconciliation_state:reconciled?"reconciled":"unreconciled",version:transactionVersion(owner,id),bill_linked:Boolean(db.prepare("SELECT 1 FROM bill_payments WHERE owner_id=? AND transaction_id=?").get(owner,id)),balance_impacts:db.prepare("SELECT a.id,a.name,-e.delta change FROM account_entries e JOIN accounts a ON a.id=e.account_id WHERE e.transaction_id=? AND a.owner_id=?").all(id,owner)};
+ return{...transactionText(record,imports.map(item=>item.raw)),is_installment:transactionType(record)==="installment"?1:0,imports,issued,source:source?"import":"manual",reconciliation_state:reconciled?"reconciled":"unreconciled",version:transactionVersion(owner,id),bill_linked:Boolean(db.prepare("SELECT 1 FROM bill_payments WHERE owner_id=? AND transaction_id=?").get(owner,id)),balance_impacts:db.prepare("SELECT a.id,a.name,-e.delta change FROM account_entries e JOIN accounts a ON a.id=e.account_id WHERE e.transaction_id=? AND a.owner_id=?").all(id,owner)};
 }
 function reversePaymentAllocations(owner:number,id:number,reason:string){
+ const evidence=db.prepare("SELECT id FROM cc_payments WHERE owner_id=? AND transaction_id=?").all(owner,id) as {id:number}[];
+ for(const p of evidence){
+  db.prepare("UPDATE cc_statements SET tracking_confirmed=0 WHERE owner_id=? AND id IN (SELECT statement_id FROM cc_allocations WHERE payment_id=?)").run(owner,p.id);
+  db.prepare("DELETE FROM cc_allocations WHERE payment_id=?").run(p.id);
+  db.prepare("DELETE FROM cc_payment_evidence WHERE payment_id=?").run(p.id);
+  db.prepare("UPDATE cc_payments SET transaction_id=NULL WHERE id=?").run(p.id);
+  db.prepare("INSERT INTO audit_events(owner_id,action,entity_id,details) VALUES(?,'credit-card.invalidate-payment',?,?)").run(owner,p.id,JSON.stringify({transactionId:id,reason}));
+ }
  const rows=db.prepare("SELECT id FROM statement_payment_allocations WHERE owner_id=? AND transaction_id=? AND reversed_at IS NULL").all(owner,id) as {id:number}[];
  db.prepare("UPDATE statement_payment_allocations SET reversed_at=CURRENT_TIMESTAMP,reverse_reason=? WHERE owner_id=? AND transaction_id=? AND reversed_at IS NULL").run(reason,owner,id);
  for(const row of rows)db.prepare("INSERT INTO audit_events(owner_id,action,entity_id,details) VALUES(?,'payment.reverse',?,?)").run(owner,row.id,JSON.stringify({reason,transactionId:id}));

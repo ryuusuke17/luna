@@ -12,7 +12,7 @@ export default defineHandler(async event => {
   const user = requireUser(event);
   if (event.req.method === "GET") {
     return (db.prepare("SELECT * FROM accounts WHERE owner_id=? ORDER BY archived_at,name").all(user.id) as { id: number; name: string; type: string; opening_date: string; archived_at: string | null }[])
-      .map(account => ({ ...account, balance: balanceFor(user.id, account.id), display: selectAccountDisplay(accountHistory(user.id, account.id)) }));
+      .map(account => ({ ...account, balance: balanceFor(user.id, account.id), display: selectAccountDisplay(account.type==="credit_card"?accountHistory(user.id, account.id).filter(s=>s.source==="issued"):[]) }));
   }
   if (event.req.method !== "POST") throw createError({ statusCode: 405, statusMessage: "Method not allowed" });
   requireMutation(event);

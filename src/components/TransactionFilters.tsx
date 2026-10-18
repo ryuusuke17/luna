@@ -9,13 +9,14 @@ import {adjacentTransactionMonth, applyTransactionDate, applyTransactionFilters,
 
 type Choice = {id: number; name: string};
 type Props = {
+  lockedAccountId?: number;
   params: URLSearchParams;
   accounts: Choice[];
   categories: Choice[];
   onChange: (params: URLSearchParams, replace?: boolean) => void;
 };
 
-export default function TransactionFilters({params, accounts, categories, onChange}: Props) {
+export default function TransactionFilters({params, accounts, categories, onChange, lockedAccountId}: Props) {
   const dateTitle = useId();
   const [dateOpen, setDateOpen] = useState(false);
   const [dateDraft, setDateDraft] = useState<TransactionDateFilter>(() => transactionDateFilter(params));
@@ -116,7 +117,7 @@ export default function TransactionFilters({params, accounts, categories, onChan
       <DialogContent className="max-w-[min(34rem,calc(100vw-2rem))]">
         <DialogHeader>
           <DialogTitle>Filter transactions</DialogTitle>
-          <DialogDescription>Changes apply together. Clear all also resets dates, search, and upload restrictions.</DialogDescription>
+          <DialogDescription>Changes apply together. Clear all resets dates, search, and upload restrictions; account pages keep their account scope.</DialogDescription>
         </DialogHeader>
         {advancedDraft && <form className="min-w-0" onSubmit={event => {
           event.preventDefault();
@@ -124,7 +125,7 @@ export default function TransactionFilters({params, accounts, categories, onChan
           setAdvancedDraft(null);
         }}>
           <div className="grid gap-4 sm:grid-cols-2">
-            <label>Account<span className="relative mt-1.5 block"><select className="field mt-0 appearance-none pr-12" value={advancedDraft.get("account") || ""} onChange={event => changeAdvanced("account", event.target.value)}>
+            <label>Account<span className="relative mt-1.5 block"><select className="field mt-0 appearance-none pr-12" disabled={Boolean(lockedAccountId)} value={String(lockedAccountId??advancedDraft.get("account")??"")} onChange={event => changeAdvanced("account", event.target.value)}>
               <option value="">All accounts</option>
               {accounts.map(account => <option key={account.id} value={account.id}>{account.name}</option>)}
             </select><ChevronDown size={16} aria-hidden="true" className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground"/></span></label>
@@ -160,7 +161,7 @@ export default function TransactionFilters({params, accounts, categories, onChan
           {(advancedDraft.get("account") || "") !== (params.get("account") || "") && (params.get("batch") || params.get("legacy")) && <p className="mt-3 text-sm text-muted-foreground">Changing the account clears the upload restriction when applied.</p>}
           {advancedDraft.toString() === "period=all" && <p role="status" className="mt-4 text-sm text-muted-foreground">All time, no search, no additional filters.</p>}
           <div className="mt-6 flex flex-wrap gap-2">
-            <Button type="button" variant="outline" className="mr-auto" onClick={() => setAdvancedDraft(new URLSearchParams({period: "all"}))}>Clear all</Button>
+            <Button type="button" variant="outline" className="mr-auto" onClick={() => setAdvancedDraft(new URLSearchParams({period: "all",...(lockedAccountId?{account:String(lockedAccountId)}:{})}))}>Clear all</Button>
             <Button type="button" variant="outline" onClick={() => setAdvancedDraft(null)}>Cancel</Button>
             <Button type="submit">Apply</Button>
           </div>

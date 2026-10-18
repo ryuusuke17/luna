@@ -14,7 +14,7 @@ export type Account = {
 };
 export type AccountDetail = {
   account: Account; history: { items: AccountSnapshot[]; total: number; page: number; pageSize: number };
-  period: { month: string | null; start: string | null; end: string | null; opening: number; closing: number; inflows: number; outflows: number };
+  period: { month: string | null; start: string | null; end: string | null; opening: number; closing: number; inflows: number; outflows: number; income: number; expenses: number; transfersIn: number; transfersOut: number };
 };
 export function accountSummary(accounts: Account[]) {
   const currencies = new Map<string, number>();
@@ -42,9 +42,6 @@ export function balanceCaption(display?: AccountDisplay) {
   return `Balance · ${display.date ? new Intl.DateTimeFormat("en", { month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(`${display.date}T00:00:00Z`)) : "Date unknown"}`;
 }
 export function utilization(account: Account) {
-  const snapshots = account.display?.source === "statement" ? account.display.snapshots : [];
-  const php = snapshots.find(s => s.currency === "PHP" && s.amount !== null);
-  if (account.display?.source === "statement" && !php) return null;
-  const debt = php ? (php.semantics === "debt-positive" ? php.amount! : -php.amount!) : -account.balance;
-  return account.credit_limit ? { percent: Math.max(0, debt) / account.credit_limit * 100, source: php ? `Statement · ${php.date}` : "Ledger · PHP" } : null;
+  const debt=-account.balance;
+  return account.credit_limit ? {percent:Math.max(0,debt)/account.credit_limit*100,source:"Ledger · PHP"}:null;
 }

@@ -38,7 +38,7 @@ test("account dialogs preserve type-aware fields, focus, conflicts and concurren
  await page.keyboard.press("Escape");await expect(dialog).not.toBeVisible();await expect(add).toBeFocused();
  await add.click();await dialog.getByLabel("Account / card type").selectOption("cash");await dialog.getByLabel("Account name").fill("Travel cash");await dialog.getByRole("button",{name:"Save account",exact:true}).click();await expect(dialog).not.toBeVisible();expect(state.writes[0].body).toMatchObject({name:"Travel cash",type:"cash",openingBalance:"0"});
  await page.getByRole("link",{name:"View account details for Daily bank"}).click();const editButton=page.getByRole("button",{name:"Edit details",exact:true});await editButton.click();const edit=page.getByRole("dialog",{name:"Edit account details"});
- await expect(page).toHaveURL(/\/accounts\/1$/);await expect(edit.getByLabel("Account / card type")).toBeDisabled();await expect(edit.getByLabel("Account name")).toHaveValue("Daily bank");await expect(edit.getByLabel("Last 4 digits (optional)")).toHaveValue("4321");
+ await expect(page).toHaveURL(/\/accounts\/1(?:\?|$)/);await expect(edit.getByLabel("Account / card type")).toBeDisabled();await expect(edit.getByLabel("Account name")).toHaveValue("Daily bank");await expect(edit.getByLabel("Last 4 digits (optional)")).toHaveValue("4321");
  await edit.getByLabel("Account name").fill("Renamed bank");await edit.getByRole("button",{name:"Save changes"}).click();await expect(edit).not.toBeVisible();await expect(page.getByRole("heading",{name:"Renamed bank",exact:true})).toBeVisible();
  await editButton.click();state.failSaves();await edit.getByLabel("Account name").fill("Retained draft");await edit.getByRole("button",{name:"Save changes"}).click();await expect(edit.getByRole("alert")).toBeVisible();await expect(edit.getByLabel("Account name")).toHaveValue("Retained draft");await page.keyboard.press("Escape");await expect(editButton).toBeFocused();
  expect(state.writes).toHaveLength(3);expect(state.writes[1].body.expected).not.toContain('"display"');expect(state.errors).toEqual([]);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
@@ -111,24 +111,22 @@ test("account creation defaults date and optional name with concise ShopMore pro
  expect(state.errors).toEqual([]);
 });
 
-test("statement-only account navigation, compact URL filters and inline upload views",async({page})=>{
- const state=await workspace(page),activityRequests:string[]=[];
- page.on("request",request=>{if(new URL(request.url()).pathname==="/api/transactions")activityRequests.push(request.url());});
+test("account history defaults to ledger, locks filters, and keeps non-credit billing hidden",async({page})=>{
+ const state=await workspace(page),requests:string[]=[];
+ page.on("request",r=>{if(new URL(r.url()).pathname==="/api/transactions")requests.push(r.url());});
  await page.setViewportSize({width:320,height:740});await page.goto("/accounts");
- await expect(page.getByText("Balance · Apr 2026",{exact:true})).toBeVisible();const link=page.getByRole("link",{name:"View account details for Daily bank"});await expect(link).toHaveAttribute("href","/accounts/1");await link.focus();await page.keyboard.press("Enter");await expect(page).toHaveURL(/\/accounts\/1$/);
- await expect(page.getByRole("tab")).toHaveCount(0);await expect(page.getByText("Ledger balance and activity",{exact:true})).toHaveCount(0);
- await expect(page.getByLabel("Date from",{exact:true})).not.toBeVisible();
- await page.getByLabel("Month",{exact:true}).fill("2026-04");const view=page.getByRole("button",{name:"View April statement.csv",exact:true});await view.click();
- const source=page.getByRole("region",{name:"Legacy statement source"});await expect(source).toContainText("123400");await expect(source.locator("..")).toContainText("April statement.csv");await expect(source.getByText("Legacy reference archives",{exact:true})).toHaveCount(0);
- await page.getByRole("button",{name:"Close source details"}).click();await expect(view).toBeFocused();await expect(page.getByLabel("Month",{exact:true})).toHaveValue("2026-04");
- await expect(page.getByRole("link",{name:"Download original April statement.csv",exact:true})).toHaveAttribute("href","/api/statement-archives/8/download");
- await page.getByLabel("Search statements",{exact:true}).fill("missing");await expect(page.getByText("No statements match these filters.")).toBeVisible();await expect(page).toHaveURL(/search=missing/);
- await page.getByLabel("Search statements",{exact:true}).fill("");await page.getByText("Custom date range",{exact:true}).focus();await page.keyboard.press("Enter");await page.getByLabel("Date from",{exact:true}).fill("2026-03-01");await expect(page.getByLabel("Month",{exact:true})).toHaveValue("");await expect(page).toHaveURL(/start=2026-03-01/);
- await page.reload();await expect(page.getByLabel("Date from",{exact:true})).toHaveValue("2026-03-01");await page.getByRole("button",{name:"Clear filters",exact:true}).first().click();await expect(page).toHaveURL(/\/accounts\/1$/);
- for(const width of [320,640,1200]){await page.setViewportSize({width,height:740});await expect(page.getByLabel("Month",{exact:true})).toBeVisible();await expect(page.getByLabel("Search statements",{exact:true})).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);}
- await page.goto("/accounts/1?tab=activity&month=2026-04");await expect(page).toHaveURL(/\/accounts\/1\?month=2026-04$/);await expect(page.getByRole("heading",{name:"Statement uploads",exact:true})).toBeVisible();expect(activityRequests).toEqual([]);
+ await expect(page.getByText("Current recorded ledger balance",{exact:true})).toBeVisible();
+ await page.getByRole("link",{name:"View account details for Daily bank"}).click();
+ await expect(page.getByRole("heading",{name:"Transactions",exact:true})).toBeVisible();
+ await expect(page.getByRole("tab",{name:"Statements",exact:true})).toHaveCount(0);
+ await expect(page.getByText("Statement balance",{exact:true})).toHaveCount(0);
+ await expect(page.getByRole("link",{name:"Import history",exact:true})).toHaveAttribute("href","/import-export?account=1&tab=history");
+ await page.getByRole("button",{name:/^Filter,/}).click();const filter=page.getByRole("dialog",{name:"Filter transactions"});
+ await expect(filter.getByRole("combobox",{name:"Account",exact:true})).toBeDisabled();await filter.getByRole("button",{name:"Clear all",exact:true}).click();await filter.getByRole("button",{name:"Apply",exact:true}).click();
+ await expect(page).toHaveURL(/account=1/);await expect(page.getByRole("button",{name:/^Date filter:/})).toHaveText("All time");
+ expect(requests.every(url=>new URL(url).searchParams.get("account")==="1")).toBe(true);
+ for(const width of [320,640,1200]){await page.setViewportSize({width,height:740});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);}
  expect(state.writes).toEqual([]);expect(state.errors).toEqual([]);
- await page.goto("/accounts?id=1");await expect(page).toHaveURL(/\/accounts\/1$/);await expect(page.getByRole("heading",{name:"Daily bank",exact:true})).toBeVisible();
 });
 
 test("account overview separates statement currencies, due details and ledger; meter stays bounded",async({page})=>{
@@ -141,11 +139,11 @@ test("account overview separates statement currencies, due details and ledger; m
  await expect(php).toContainText("₱1,250.00");await expect(php).toContainText("2026-05-20");await expect(php).toContainText("₱50.00");
  await expect(usd).toContainText(/25\.00/);await expect(usd.getByText("Not provided",{exact:true})).toHaveCount(2);
  await expect(header.getByLabel("Ledger reference",{exact:true})).toHaveCount(0);
- await expect(header.getByRole("meter")).toHaveAttribute("aria-valuenow","100");await expect(header.getByRole("meter")).toHaveAttribute("aria-valuetext",/125% utilized/);
- await expect(header.getByText("Over the recorded credit limit",{exact:true})).toBeVisible();
+ await expect(header.getByRole("meter")).toHaveAttribute("aria-valuenow","90");await expect(header.getByRole("meter")).toHaveAttribute("aria-valuetext",/90% utilized/);
+ await expect(header.getByLabel("Current recorded ledger balance",{exact:true})).toContainText("₱900.00");
  for(const width of [320,640,1200]){
   await page.setViewportSize({width,height:800});await expect(php).toBeVisible();
-  const balance=(await php.boundingBox())!,usage=(await header.getByLabel("Credit utilization",{exact:true}).boundingBox())!;
+  const balance=(await header.getByLabel("Current recorded ledger balance",{exact:true}).boundingBox())!,usage=(await header.getByLabel("Credit utilization",{exact:true}).boundingBox())!;
   if(width>=640){expect(Math.abs(balance.y-usage.y)).toBeLessThan(1);expect(Math.abs(balance.height-usage.height)).toBeLessThan(1);expect(usage.x).toBeGreaterThanOrEqual(balance.x+balance.width);}
   else expect(usage.y).toBeGreaterThanOrEqual(balance.y+balance.height);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);

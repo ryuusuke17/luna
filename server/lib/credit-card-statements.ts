@@ -4,6 +4,7 @@ import {db} from "./db.ts";
 import {parseCreditCardStatementCsv,exactStatementSum,signedStatementAmount} from "../../src/lib/credit-card-csv.ts";
 import {isCalendarDate} from "../../src/lib/finance.ts";
 
+export function initializeCreditCardSchema(){
 // ponytail: source bytes share the private SQLite backup lifecycle; use private object storage when files outgrow 2 MB.
 db.exec(`
 CREATE TABLE IF NOT EXISTS cc_statements(
@@ -41,18 +42,31 @@ CREATE TABLE IF NOT EXISTS cc_payment_evidence(
  line_id INTEGER PRIMARY KEY REFERENCES cc_statement_lines(id),payment_id INTEGER NOT NULL REFERENCES cc_payments(id),
  actor_id INTEGER NOT NULL REFERENCES users(id),created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TABLE IF NOT EXISTS cc_line_decisions(
+ line_id INTEGER PRIMARY KEY REFERENCES cc_statement_lines(id),transaction_id INTEGER REFERENCES transactions(id),
+ action TEXT NOT NULL CHECK(action IN ('link','import','skip')),classification TEXT NOT NULL,
+ reason TEXT NOT NULL,actor_id INTEGER NOT NULL REFERENCES users(id),request_key TEXT NOT NULL,
+ request_json TEXT NOT NULL,version TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,UNIQUE(actor_id,request_key)
+);
+CREATE INDEX IF NOT EXISTS cc_decision_transaction_idx ON cc_line_decisions(transaction_id);
 `);
+if(!(db.pragma("table_info(cc_payments)") as {name:string}[]).some(c=>c.name==="transaction_id"))db.exec("ALTER TABLE cc_payments ADD COLUMN transaction_id INTEGER REFERENCES transactions(id)");
+db.exec("CREATE UNIQUE INDEX IF NOT EXISTS cc_payment_transaction_idx ON cc_payments(transaction_id) WHERE transaction_id IS NOT NULL");
+db.exec("CREATE VIEW IF NOT EXISTS cc_decision_projection AS WITH RECURSIVE chain(line_id,owner_id,original_transaction_id,resolved_transaction_id) AS (SELECT d.line_id,s.owner_id,d.transaction_id,d.transaction_id FROM cc_line_decisions d JOIN cc_statement_lines l ON l.id=d.line_id JOIN cc_statements s ON s.id=l.statement_id WHERE d.transaction_id IS NOT NULL UNION SELECT chain.line_id,chain.owner_id,chain.original_transaction_id,t.id FROM chain JOIN transactions t ON t.replaces_id=chain.resolved_transaction_id AND t.owner_id=chain.owner_id) SELECT * FROM chain WHERE NOT EXISTS(SELECT 1 FROM transactions t WHERE t.replaces_id=chain.resolved_transaction_id AND t.owner_id=chain.owner_id)");
+}
+initializeCreditCardSchema();
 const id=z.number().int().positive().safe();
 const date=z.string().refine(isCalendarDate,"Choose a valid date");
 const upload=z.object({filename:z.string().min(1).max(180).regex(/^[^/\\\x00-\x1f]+\.csv$/i),base64:z.string().min(1).max(2_666_668),cardId:id,currency:z.string().regex(/^[A-Z]{3}$/),confirm:z.boolean().optional(),acknowledge:z.boolean().optional(),reviewNote:z.string().max(2000).optional(),supersedesId:id.optional(),allowAdditional:z.boolean().optional()}).strict();
-type Card={id:number;name:string;last4:string|null;issuer:string|null;credit_limit:number|null};
+type Card={archived_at:string|null;id:number;name:string;last4:string|null;issuer:string|null;credit_limit:number|null};
 type StatementRecord={id:number;owner_id:number;card_id:number;currency:string;filename:string;file_hash:string;parser_version:string;metadata_json:string;raw_metadata_json:string;reconciliation_json:string;warnings_json:string;statement_date:string;due_date:string;original_balance:number;minimum_due:number;review_note:string;supersedes_id:number|null;superseded_by:number|null;tracking_confirmed:number;created_at:string;card_name:string;last4:string|null;issuer:string|null;applied:number};
 const columns="s.id,s.owner_id,s.card_id,s.currency,s.filename,s.file_hash,s.parser_version,s.metadata_json,s.raw_metadata_json,s.reconciliation_json,s.warnings_json,s.statement_date,s.due_date,s.original_balance,s.minimum_due,s.review_note,s.supersedes_id,s.superseded_by,s.tracking_confirmed,s.created_at,a.name card_name,a.last4,a.issuer,COALESCE((SELECT SUM(x.amount) FROM cc_allocations x WHERE x.statement_id=s.id),0) applied";
 function audit(owner:number,action:string,entity:number,details:unknown){db.prepare("INSERT INTO audit_events(owner_id,action,entity_id,details) VALUES(?,?,?,?)").run(owner,`credit-card.${action}`,entity,JSON.stringify(details));}
-export function creditCards(owner:number){return db.prepare("SELECT a.id,a.name,a.last4,COALESCE(NULLIF(a.issuer,''),(SELECT json_extract(s.metadata_json,'$.issuer') FROM cc_statements s WHERE s.card_id=a.id AND s.owner_id=a.owner_id AND s.superseded_by IS NULL ORDER BY s.statement_date DESC,s.id DESC LIMIT 1)) issuer,a.credit_limit FROM accounts a WHERE a.owner_id=? AND a.type='credit_card' AND a.archived_at IS NULL ORDER BY a.name,a.id").all(owner) as Card[];}
+export function creditCards(owner:number,includeArchived=false){return db.prepare("SELECT a.id,a.name,a.last4,a.archived_at,COALESCE(NULLIF(a.issuer,''),(SELECT json_extract(s.metadata_json,'$.issuer') FROM cc_statements s WHERE s.card_id=a.id AND s.owner_id=a.owner_id AND s.superseded_by IS NULL ORDER BY s.statement_date DESC,s.id DESC LIMIT 1)) issuer,a.credit_limit FROM accounts a WHERE a.owner_id=? AND a.type='credit_card' AND (?=1 OR a.archived_at IS NULL) ORDER BY a.name,a.id").all(owner,Number(includeArchived)) as Card[];}
 function card(owner:number,cardId:number){const found=creditCards(owner).find(c=>c.id===cardId);if(!found)throw Error("Select an owned, active credit card account");return found;}
 function statement(owner:number,statementId:number){
- const found=db.prepare(`SELECT ${columns} FROM cc_statements s JOIN accounts a ON a.id=s.card_id AND a.owner_id=s.owner_id WHERE s.owner_id=? AND s.id=?`).get(owner,statementId) as StatementRecord|undefined;
+ const found=db.prepare(`SELECT ${columns} FROM cc_statements s JOIN accounts a ON a.id=s.card_id AND a.owner_id=s.owner_id WHERE s.owner_id=? AND s.id=? AND a.type='credit_card'`).get(owner,statementId) as StatementRecord|undefined;
  if(!found)throw Error("Statement unavailable");return found;
 }
 export function statementPaymentStatus(balance:number,applied:number,due:string,tracked:boolean,today=new Date().toISOString().slice(0,10)){
@@ -71,6 +85,11 @@ export function importCreditCardStatement(owner:number,input:unknown){
  if(existing)return{duplicate:true,existingId:existing.id};
  let text:string;try{text=new TextDecoder("utf-8",{fatal:true}).decode(bytes);}catch{throw Error("Use UTF-8 encoding");}
  const preview=parseCreditCardStatementCsv(text,{currency:value.currency});
+ const semantic=(metadata:unknown,lines:Record<string,unknown>[])=>JSON.stringify([metadata,lines.map(({rowNumber,rawFields,candidateType,...line})=>line)]);
+ const identity=semantic(preview.metadata,preview.lines);
+ const equivalent=()=>(db.prepare("SELECT id,metadata_json FROM cc_statements WHERE owner_id=? AND card_id=? AND currency=? AND statement_date=? AND superseded_by IS NULL").all(owner,target.id,value.currency,preview.metadata.statementDate) as {id:number;metadata_json:string}[]).find(s=>semantic(JSON.parse(s.metadata_json),(db.prepare("SELECT source_json FROM cc_statement_lines WHERE statement_id=? ORDER BY row_index").all(s.id) as {source_json:string}[]).map(l=>JSON.parse(l.source_json)))===identity);
+ const same=equivalent();
+ if(same)return{duplicate:true,existingId:same.id};
  const issuerMismatch=Boolean(target.issuer&&target.issuer.trim().toLowerCase()!==preview.metadata.issuer.trim().toLowerCase());
  const crossCard=db.prepare("SELECT id,card_id FROM cc_statements WHERE owner_id=? AND file_hash=?").all(owner,fileHash);
  const sameDate=db.prepare("SELECT id,filename FROM cc_statements WHERE owner_id=? AND card_id=? AND statement_date=? AND superseded_by IS NULL").all(owner,target.id,preview.metadata.statementDate) as {id:number;filename:string}[];
@@ -81,6 +100,9 @@ export function importCreditCardStatement(owner:number,input:unknown){
  return db.transaction(()=>{
   const duplicate=db.prepare("SELECT id FROM cc_statements WHERE owner_id=? AND card_id=? AND file_hash=?").get(owner,target.id,fileHash) as {id:number}|undefined;
   if(duplicate)return{duplicate:true,existingId:duplicate.id};
+  card(owner,target.id);
+  const same=equivalent();if(same)return{duplicate:true,existingId:same.id};
+  if(!value.supersedesId&&!value.allowAdditional&&db.prepare("SELECT 1 FROM cc_statements WHERE owner_id=? AND card_id=? AND statement_date=? AND superseded_by IS NULL").get(owner,target.id,preview.metadata.statementDate))throw Error("Review the existing issue: choose replacement or explicitly confirm an additional issue");
   if(value.supersedesId){const original=statement(owner,value.supersedesId);if(original.card_id!==target.id||original.currency!==value.currency||original.statement_date!==preview.metadata.statementDate||original.superseded_by)throw Error("Replacement must target the active issue of this card, currency and date");if(original.applied)throw Error("Remove payment allocations before replacing this statement");}
   const m=preview.metadata;
   const newId=Number(db.prepare("INSERT INTO cc_statements(owner_id,card_id,currency,filename,file_hash,source_bytes,parser_version,metadata_json,raw_metadata_json,reconciliation_json,warnings_json,statement_date,due_date,original_balance,minimum_due,review_note,supersedes_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").run(owner,target.id,value.currency,value.filename,fileHash,bytes,preview.parserVersion,JSON.stringify(m),JSON.stringify(preview.metadataRaw),JSON.stringify(preview.reconciliation),JSON.stringify(warnings),m.statementDate,m.dueDate,m.originalOutstandingBalance,m.minimumDue,value.reviewNote??"",value.supersedesId??null).lastInsertRowid);
@@ -93,7 +115,7 @@ export function importCreditCardStatement(owner:number,input:unknown){
 }
 const filters=z.object({year:z.string().regex(/^\d{4}$/).optional(),month:z.string().regex(/^\d{4}-(?:0[1-9]|1[0-2])$/).optional(),issuer:z.string().max(240).optional(),cards:z.string().regex(/^\d+(?:,\d+)*$/).max(500).optional(),status:z.enum(["not_tracked","unpaid","partial","paid","past_due_unverified","credit_balance"]).optional(),search:z.string().max(200).optional(),dueStart:date.optional(),dueEnd:date.optional(),page:z.string().regex(/^[1-9]\d{0,5}$/).optional(),sort:z.enum(["newest","oldest","balance"]).optional()}).strict();
 export function creditCardStatementScope(owner:number,input:unknown={}){
- const f=filters.parse(input),where=["s.owner_id=?","s.superseded_by IS NULL"],args:(number|string)[]=[owner];
+ const f=filters.parse(input),where=["s.owner_id=?","s.superseded_by IS NULL","a.type='credit_card'"],args:(number|string)[]=[owner];
  if(f.dueStart&&f.dueEnd&&f.dueStart>f.dueEnd)throw Error("Due date start must precede end");
  if(f.dueStart){where.push("s.due_date>=?");args.push(f.dueStart);}
  if(f.dueEnd){where.push("s.due_date<=?");args.push(f.dueEnd);}
@@ -101,7 +123,7 @@ export function creditCardStatementScope(owner:number,input:unknown={}){
  if(f.month){where.push("substr(s.statement_date,1,7)=?");args.push(f.month);}
  if(f.issuer){where.push("COALESCE(NULLIF(a.issuer,''),json_extract(s.metadata_json,'$.issuer'))=?");args.push(f.issuer);}
  if(f.cards){const ids=f.cards.split(",").map(Number);if(!ids.every(Number.isSafeInteger))throw Error("Invalid card filter");where.push(`s.card_id IN (${ids.map(()=>"?").join(",")})`);args.push(...ids);}
- if(f.search){where.push("(a.name LIKE ? OR s.filename LIKE ? OR json_extract(s.metadata_json,'$.title') LIKE ?)");args.push(...Array(3).fill(`%${f.search}%`));}
+ if(f.search){where.push("(instr(lower(a.name),lower(?))>0 OR instr(lower(s.filename),lower(?))>0 OR instr(lower(json_extract(s.metadata_json,'$.title')),lower(?))>0)");args.push(...Array(3).fill(f.search));}
  const statusExpression="CASE WHEN s.original_balance<0 THEN 'credit_balance' WHEN s.original_balance=0 OR applied>=s.original_balance THEN 'paid' WHEN s.due_date<date('now') THEN 'past_due_unverified' WHEN s.tracking_confirmed=0 AND applied=0 THEN 'not_tracked' WHEN applied>0 THEN 'partial' ELSE 'unpaid' END";
  const base=`SELECT ${columns} FROM cc_statements s JOIN accounts a ON a.id=s.card_id AND a.owner_id=s.owner_id WHERE ${where.join(" AND ")}`;
  const scoped=`SELECT *,${statusExpression} tracker_status FROM (${base}) s`;
@@ -117,7 +139,7 @@ export function listCreditCardStatements(owner:number,input:unknown={}){
  const total=(db.prepare(`SELECT COUNT(*) total FROM (${final})`).get(...finalArgs) as {total:number}).total;
  const page=Number(f.page??1),pageSize=25,order=f.sort==="oldest"?"statement_date,id":f.sort==="balance"?"original_balance DESC,id DESC":"statement_date DESC,id DESC";
  const rows=db.prepare(`${final} ORDER BY ${order} LIMIT ? OFFSET ?`).all(...finalArgs,pageSize,(page-1)*pageSize) as StatementRecord[];
- const allCards=creditCards(owner),selectedIds=f.cards?.split(",").map(Number);
+ const allCards=creditCards(owner,true),selectedIds=f.cards?.split(",").map(Number);
  const cards=allCards.filter(c=>(!f.issuer||c.issuer===f.issuer)&&(!selectedIds||selectedIds.includes(c.id))).map(c=>{
   const latest=db.prepare(`SELECT ${columns} FROM cc_statements s JOIN accounts a ON a.id=s.card_id WHERE s.owner_id=? AND s.card_id=? AND s.superseded_by IS NULL ORDER BY s.statement_date DESC,s.id DESC LIMIT 1`).get(owner,c.id) as StatementRecord|undefined;
   const selected=f.month?db.prepare("SELECT id FROM cc_statements WHERE owner_id=? AND card_id=? AND substr(statement_date,1,7)=? AND superseded_by IS NULL ORDER BY statement_date DESC,id DESC").all(owner,c.id,f.month) as {id:number}[]:[];
@@ -130,7 +152,7 @@ const lineFilters=z.object({page:z.string().regex(/^[1-9]\d{0,5}$/).optional(),s
 export function creditCardStatementDetail(owner:number,statementId:number,input:unknown={}){
  const saved=statement(owner,statementId),f=lineFilters.parse(input),where=["l.statement_id=?"],args:(string|number)[]=[statementId];
  if(f.start&&f.end&&f.start>f.end)throw Error("Start date must precede end date");
- if(f.search){where.push("(json_extract(l.source_json,'$.merchantRaw') LIKE ? OR COALESCE(n.notes_override,json_extract(l.source_json,'$.transactionNotesRaw')) LIKE ?)");args.push(`%${f.search}%`,`%${f.search}%`);}
+ if(f.search){where.push("(instr(lower(json_extract(l.source_json,'$.merchantRaw')),lower(?))>0 OR instr(lower(COALESCE(NULLIF(n.notes_override,''),json_extract(l.source_json,'$.transactionNotesRaw'))),lower(?))>0)");args.push(f.search,f.search);}
  if(f.type){where.push("COALESCE(NULLIF(n.type_override,''),json_extract(l.source_json,'$.typeRaw'))=?");args.push(f.type);}
  if(f.category){where.push("COALESCE(NULLIF(n.category_override,''),json_extract(l.source_json,'$.categoryRaw'))=?");args.push(f.category);}
  if(f.sign)where.push(f.sign==="debit"?"l.amount>0":"l.amount<0");
@@ -139,7 +161,7 @@ export function creditCardStatementDetail(owner:number,statementId:number,input:
  const total=(db.prepare(`SELECT COUNT(*) total ${joins} WHERE ${condition}`).get(...args) as {total:number}).total;
  const page=Number(f.page??1),pageSize=50,order=({source:"l.row_index",sale:"json_extract(l.source_json,'$.saleDate'),l.row_index",post:"l.post_date,l.row_index",amount:"l.amount,l.row_index",merchant:"json_extract(l.source_json,'$.merchantRaw'),l.row_index"})[f.sort??"source"];
  const lines=(db.prepare(`SELECT l.id,l.source_json,n.type_override,n.category_override,n.notes_override,(SELECT payment_id FROM cc_payment_evidence e WHERE e.line_id=l.id) evidence_payment_id ${joins} WHERE ${condition} ORDER BY ${order} LIMIT ? OFFSET ?`).all(...args,pageSize,(page-1)*pageSize) as {id:number;source_json:string;type_override:string|null;category_override:string|null;notes_override:string|null;evidence_payment_id:number|null}[]).map(({source_json,...line})=>({...line,source:JSON.parse(source_json)}));
- const payments=db.prepare("SELECT p.id,p.payment_date,p.amount,p.currency,p.source_account_id,p.source_name_snapshot,p.reference,p.notes,COALESCE((SELECT SUM(amount) FROM cc_allocations x WHERE x.payment_id=p.id),0) allocated,COALESCE((SELECT amount FROM cc_allocations x WHERE x.payment_id=p.id AND x.statement_id=?),0) applied_here FROM cc_payments p WHERE p.owner_id=? AND p.card_id=? ORDER BY p.payment_date DESC,p.id DESC").all(statementId,owner,saved.card_id);
+ const payments=db.prepare("SELECT p.id,p.transaction_id,p.payment_date,p.amount,p.currency,p.source_account_id,p.source_name_snapshot,p.reference,p.notes,COALESCE((SELECT SUM(amount) FROM cc_allocations x WHERE x.payment_id=p.id),0) allocated,COALESCE((SELECT amount FROM cc_allocations x WHERE x.payment_id=p.id AND x.statement_id=?),0) applied_here FROM cc_payments p WHERE p.owner_id=? AND p.card_id=? ORDER BY p.payment_date DESC,p.id DESC").all(statementId,owner,saved.card_id);
  const history=(db.prepare(`SELECT ${columns} FROM cc_statements s JOIN accounts a ON a.id=s.card_id WHERE s.owner_id=? AND s.card_id=? ORDER BY s.statement_date DESC,s.id DESC LIMIT 100`).all(owner,saved.card_id) as StatementRecord[]).map(present);
  const sources=db.prepare("SELECT id,name FROM accounts WHERE owner_id=? AND archived_at IS NULL AND type IN ('cash','bank','wallet') ORDER BY name").all(owner);
  return{...present(saved),lines,total,page,pageSize,payments,history,sources};
@@ -164,6 +186,7 @@ export function mutateCreditCardStatement(owner:number,statementId:number,input:
  ]).parse(input);
  return db.transaction(()=>{
   const saved=statement(owner,statementId);
+  card(owner,saved.card_id);
   if(action.action==="tracking"){db.prepare("UPDATE cc_statements SET tracking_confirmed=? WHERE owner_id=? AND id=?").run(Number(action.confirmed),owner,statementId);}
   else if(action.action==="annotate"){
    const v=action.data;if(!db.prepare("SELECT id FROM cc_statement_lines WHERE id=? AND statement_id=?").get(v.lineId,statementId))throw Error("Line unavailable");
@@ -176,7 +199,7 @@ export function mutateCreditCardStatement(owner:number,statementId:number,input:
     const existing=db.prepare("SELECT id FROM cc_payments WHERE owner_id=? AND id=? AND card_id=? AND currency=?").get(owner,v.paymentId,v.cardId,v.currency);
     if(!existing)throw Error("Payment unavailable");
     if(db.prepare("SELECT 1 FROM cc_allocations WHERE payment_id=? UNION SELECT 1 FROM cc_payment_evidence WHERE payment_id=?").get(v.paymentId,v.paymentId))throw Error("Remove all allocations and evidence links before correcting a payment");
-    db.prepare("UPDATE cc_payments SET payment_date=?,amount=?,source_account_id=?,source_name_snapshot=?,reference=?,notes=? WHERE id=? AND owner_id=?").run(v.date,amount,v.sourceAccountId,source?.name??"Unknown",v.reference,v.notes,v.paymentId,owner);
+    db.prepare("UPDATE cc_payments SET transaction_id=NULL,payment_date=?,amount=?,source_account_id=?,source_name_snapshot=?,reference=?,notes=? WHERE id=? AND owner_id=?").run(v.date,amount,v.sourceAccountId,source?.name??"Unknown",v.reference,v.notes,v.paymentId,owner);
    }else{
     const existing=db.prepare("SELECT id FROM cc_payments WHERE owner_id=? AND request_key=?").get(owner,v.requestKey);if(!existing)db.prepare("INSERT INTO cc_payments(owner_id,card_id,payment_date,amount,currency,source_account_id,source_name_snapshot,reference,notes,request_key) VALUES(?,?,?,?,?,?,?,?,?,?)").run(owner,v.cardId,v.date,amount,v.currency,v.sourceAccountId,source?.name??"Unknown",v.reference,v.notes,v.requestKey);
    }

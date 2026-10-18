@@ -31,7 +31,6 @@
   min-width: 0;
   min-height: min-content;
   overflow: hidden;
-  aspect-ratio: 1.58;
   padding: 20px;
   border: 1px solid var(--account-rim);
   border-radius: 20px;

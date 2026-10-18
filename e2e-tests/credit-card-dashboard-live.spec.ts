@@ -16,8 +16,8 @@ test("issued-statement importer to dashboard: full fixture, no ledger changes, r
  const baseline={accounts:await get("accounts"),transactions:await get("transactions?page=1&period=all")};
  const initial=await get("credit-card-dashboard");
  await page.setViewportSize({width:1440,height:1000});await page.goto("/statements");
- await expect(page.getByRole("heading",{name:"Credit Card Dashboard",exact:true})).toBeVisible();
- if(!initial.diagnostics.issued.active){await expect(page.getByRole("heading",{name:"Import your first issued statement"})).toBeVisible();await expect(page.getByRole("region",{name:/Statement summary/})).toHaveCount(0);}
+ await expect(page.getByRole("heading",{name:"Statements",exact:true})).toBeVisible();
+ if(!initial.diagnostics.issued.active)await expect(page.getByText(/No issued statements match this selection/)).toBeVisible();
  for(const [device,viewport] of [["desktop",{width:1440,height:1000}],["mobile",{width:390,height:844}]] as const){await page.setViewportSize(viewport);await page.screenshot({path:testInfo.outputPath(`pre-import-${device}.png`),fullPage:true});}
  await page.goto("/import-export?tab=import");const importer=page.getByRole("region",{name:"Import Credit Card Statement",exact:true});
  await importer.getByLabel("Exact credit card").selectOption(String(card.id));await importer.getByLabel("Statement currency").selectOption("PHP");
@@ -31,19 +31,18 @@ test("issued-statement importer to dashboard: full fixture, no ledger changes, r
  const imported=await get(`credit-card-dashboard?month=2026-04&cards=${card.id}`),id=imported.items[0].id;
  expect(imported.activity.total).toBe(13);expect(imported.metrics[0].originalBalance).toBe(1496931);expect(imported.metrics[0].remaining).toBe(1496931);expect(imported.metrics[0].applied).toBe(0);
  await page.goto("/statements");const latest=await get("credit-card-dashboard");
- await expect(page.getByRole("button",{name:/^Selected month:/})).toHaveText(new Intl.DateTimeFormat("en",{month:"long",year:"numeric",timeZone:"UTC"}).format(new Date(`${latest.selectedMonth}-01T12:00:00Z`)));
+ expect(latest.selectedMonth).toBeNull();await expect(page.getByRole("combobox",{name:"Issue month",exact:true})).toHaveValue("");
  await page.goto(`/statements?month=2026-04&issuer=UnionBank&cards=${card.id}`);
  const table=page.getByRole("region",{name:"Unified statement transactions",exact:true});await expect(table.getByRole("row")).toHaveCount(14);await expect(table).toContainText("2026-03-07");await expect(table).toContainText("April 2026");await expect(table).toContainText("Unknown");
  await page.getByLabel("Merchant / notes",{exact:true}).fill("UNIQLO");await expect(table.getByRole("row")).toHaveCount(2);
  await page.getByLabel("Merchant / notes",{exact:true}).fill("");await expect(table.getByRole("row")).toHaveCount(14);
- await page.getByLabel("Line type",{exact:true}).selectOption("credit");await expect(table.getByRole("row")).toHaveCount(2);await expect(table).toContainText("BDO BILLS PAYMENT -CASH");await expect(table).toContainText("In-cycle evidence; included in source balance");await page.getByLabel("Line type",{exact:true}).selectOption("");
+ await page.getByRole("combobox",{name:"Line type",exact:true}).selectOption("credit");await expect(table.getByRole("row")).toHaveCount(2);await expect(table).toContainText("BDO BILLS PAYMENT -CASH");await expect(table).toContainText("In-cycle evidence; included in source balance");await page.getByRole("combobox",{name:"Line type",exact:true}).selectOption("");
  for(const [device,viewport] of [["desktop",{width:1440,height:1000}],["tablet",{width:834,height:1112}],["mobile",{width:390,height:844}],["narrow",{width:320,height:740}]] as const){await page.setViewportSize(viewport);await expect(table.getByRole("row")).toHaveCount(14);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:testInfo.outputPath(`dashboard-${device}.png`),fullPage:true});}
- await page.getByRole("button",{name:"Next month",exact:true}).focus();await page.keyboard.press("Enter");await expect(page.getByRole("button",{name:/^Selected month:/})).toHaveText("May 2026");await expect(page.getByText("No imported statement for May 2026. Balance unknown.",{exact:true})).toBeVisible();
- await page.getByRole("button",{name:"Previous month",exact:true}).click();await expect(table.getByRole("row")).toHaveCount(14);
+ await page.getByRole("combobox",{name:"Issue month",exact:true}).selectOption("");await expect(page).not.toHaveURL(/month=/);
  await page.getByRole("button",{name:`View statement #${id}`,exact:true}).click();const detail=page.getByRole("region",{name:"Credit card statement detail",exact:true});await expect(detail).toBeVisible();await expect(detail).toBeFocused();await expect(detail.getByRole("link",{name:"Download immutable original CSV",exact:true})).toBeVisible();await expect(detail.getByRole("region",{name:"Imported statement lines",exact:true}).getByRole("row")).toHaveCount(14);
  expect(await (await request.get(`/api/credit-card-statements/${id}/download`)).body()).toEqual(fixture);
  await detail.getByRole("button",{name:"Close statement",exact:true}).click();await expect(page.getByRole("button",{name:`View statement #${id}`,exact:true})).toBeFocused();
- await page.getByRole("button",{name:"Clear all filters",exact:true}).click();await expect(page.getByLabel("Issuer",{exact:true})).toHaveValue("");await expect(page.getByLabel("Card",{exact:true})).toHaveValue("");
+ await page.getByRole("button",{name:"Clear all filters",exact:true}).click();await expect(page.getByRole("combobox",{name:"Issuer",exact:true})).toHaveValue("");await expect(page.getByRole("combobox",{name:"Card",exact:true})).toHaveValue("");
  const missing=await get(`credit-card-dashboard?month=2026-04&cards=${second.id}`);expect(missing.metrics).toEqual([]);expect(missing.cards[0].selectedMonth).toBeNull();
  expect((await request.post("/api/credit-card-statements",{data:{}})).status()).toBe(403);
  const anonymous=await page.context().browser()!.newContext({baseURL});expect((await anonymous.request.get("/api/credit-card-dashboard")).status()).toBe(401);expect((await anonymous.request.get(`/api/credit-card-statements/${id}/download`)).status()).toBe(401);await anonymous.close();

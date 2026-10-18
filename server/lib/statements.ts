@@ -145,12 +145,7 @@ export function statementDetail(owner:number,id:number){
  const historyExtension=sourceAffected.length&&current.type==="credit_card"?{openingDate:current.opening_date as string,proposedDate:sourceAffected.map(e=>e.row!.date).sort()[0],affectedRows:sourceAffected.length,sourceDates:[...new Set(sourceAffected.map(e=>e.row!.date))].sort(),allowed:!conflict&&!recoveryError,conflict:recoveryError||conflict}:null;
  return{...metadata,summary,rawSummary,historyExtension,recoveryError,discrepancies:statementDiscrepancies(summary,entries.map(e=>e.row)),entries,reconciliation,version:hash(JSON.stringify([metadata,entries,reconciliation,options,accounts,historyExtension,recoveryError]))};
 }
-function historyConflict(owner:number,a:any){
- if(a.archived_at)return "Account unavailable; archived accounts cannot extend history.";
- if(db.prepare("SELECT 1 FROM transactions t JOIN account_entries e ON e.transaction_id=t.id WHERE t.owner_id=? AND e.account_id=? AND t.kind='opening' AND t.voided_at IS NULL").get(owner,a.id))return "Active opening-balance transaction prevents history extension. Review the opening balance in account history; it will not be moved or adjusted.";
- if(db.prepare("SELECT 1 FROM reconciliations WHERE owner_id=? AND account_id=? AND state='finalized'").get(owner,a.id))return "Finalized reconciliation prevents history extension. Review and reopen the reconciliation before changing account history.";
- return "";
-}
+import {historyConflict} from "./account-history.ts";
 function recoveryRows(owner:number,s:any,stored:any[]){
  const bytes=readFileSync(filePath(s.file_key));if(hash(bytes)!==s.file_hash)throw Error("Source mismatch. Reload; original file integrity must be restored before recovery.");
  const parsed=parsedSource(owner,account(owner,s.account_id),bytes).rows;

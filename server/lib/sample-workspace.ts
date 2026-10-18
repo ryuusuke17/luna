@@ -12,6 +12,7 @@ function storage(){
 }
 function snapshot(owner:number){
  if(!db.prepare("SELECT 1 FROM users WHERE id=?").get(owner))throw Error("Workspace unavailable");
+ if(db.prepare("SELECT 1 FROM cc_line_decisions d JOIN cc_statement_lines l ON l.id=d.line_id JOIN cc_statements s ON s.id=l.statement_id WHERE s.owner_id=? AND d.transaction_id IS NOT NULL UNION SELECT 1 FROM cc_payments WHERE owner_id=? AND transaction_id IS NOT NULL").get(owner,owner))throw Error("Sample reset is unavailable while issued statement evidence links to ledger history. Use a separate disposable workspace; existing financial records must remain intact.");
  const data:Record<string,unknown[]>={};for(const table of ['accounts','categories','transactions','statement_imports','statement_import_rows','csv_import_batches','csv_import_rows','statements','reconciliations','statement_payment_allocations','payment_methods','bills','bill_payments','budgets','goals','goal_contributions','merchant_rules','service_providers','workspace_preferences','audit_events'])data[table]=db.prepare(`SELECT * FROM ${table} WHERE owner_id=? ORDER BY rowid`).all(owner);
  data.account_entries=db.prepare("SELECT e.* FROM account_entries e JOIN transactions t ON t.id=e.transaction_id WHERE t.owner_id=? ORDER BY e.id").all(owner);
  data.statement_entries=db.prepare("SELECT e.* FROM statement_entries e JOIN statements s ON s.id=e.statement_id WHERE s.owner_id=? ORDER BY e.id").all(owner);
