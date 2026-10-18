@@ -1,4 +1,4 @@
-import {useState} from "react";
+import {useEffect,useState} from "react";
 import {Link} from "react-router-dom";
 import {useQuery,useQueryClient} from "@tanstack/react-query";
 import {Button} from "@/components/WorkspaceButton";
@@ -8,7 +8,14 @@ import {cardLabel,type ImportResult,type StatementDashboard} from "@/lib/credit-
 
 export default function CreditCardStatementImporter({initialAccount}:{initialAccount?:string}){
  const client=useQueryClient(),cards=useQuery({queryKey:["credit-card-statements","cards"],queryFn:()=>api<StatementDashboard>("credit-card-statements")});
+ const prefs=useQuery({queryKey:["preferences"],queryFn:()=>api<{default_transaction_currency:string}>("preferences")});
  const [file,setFile]=useState<File|null>(null),[cardId,setCardId]=useState(initialAccount??""),[issuer,setIssuer]=useState(""),[currency,setCurrency]=useState(""),[base64,setBase64]=useState(""),[result,setResult]=useState<ImportResult|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(""),[ack,setAck]=useState(false),[note,setNote]=useState(""),[revision,setRevision]=useState(""),[completed,setCompleted]=useState(false);
+
+ useEffect(()=>{
+  if(prefs.data?.default_transaction_currency&&!currency){
+   setCurrency(prefs.data.default_transaction_currency);
+  }
+ },[prefs.data?.default_transaction_currency]);
  function reset(){setResult(null);setBase64("");setAck(false);setNote("");setRevision("");setCompleted(false);setError("");}
  async function preview(event:React.FormEvent){
   event.preventDefault();if(!file||busy)return;setError("");setBusy(true);
@@ -28,9 +35,9 @@ export default function CreditCardStatementImporter({initialAccount}:{initialAcc
   <h2 id="credit-card-import-title">Import Credit Card Statement</h2><p>Statements only. No ledger transactions, account balances or payment postings change. One file per exact card. Currency requires explicit selection.</p>
   <p className="text-sm text-muted-foreground">Statement summary first; then Sale date, Post date, Merchant, Amount, Category, Transaction notes, Transaction type. Sale date may be blank; Post date is required. Expense, Installments and Card repayment received stay separate from Category. Positive billed charges; negative payments/credits. Earlier Type-column templates remain supported.</p>
   {cards.isPending?<p role="status">Loading cards…</p>:cards.error?<p role="alert">{cards.error.message}</p>:!cards.data?.allCards.some(c=>!c.archived_at)?<p>No active credit cards. <Link className="underline" to="/accounts">Create a credit card account</Link> first.</p>:<form onSubmit={preview}><fieldset disabled={busy||Boolean(result)} className="grid gap-4 sm:grid-cols-2">
-   <label>Bank / issuer<select className="field" value={issuer} onChange={e=>{setIssuer(e.target.value);setCardId("");}}><option value="">All issuers</option>{cards.data.issuers.map(i=><option key={i}>{i}</option>)}</select></label>
+   <label>Bank / issuer<select className="field" value={issuer} onChange={e=>{setIssuer(e.target.value);setCardId("");}}><option value="">Choose bank / issuer</option>{cards.data.issuers.map(i=><option key={i} value={i}>{i}</option>)}</select></label>
    <label>Exact credit card<select className="field" required value={cardId} onChange={e=>setCardId(e.target.value)}><option value="">Choose nickname and last four</option>{cards.data.allCards.filter(c=>!c.archived_at&&(!issuer||c.issuer===issuer)).map(c=><option key={c.id} value={c.id}>{cardLabel(c)}</option>)}</select></label>
-   <label>Statement currency<select required className="field" value={currency} onChange={e=>setCurrency(e.target.value)}><option value="">Choose printed currency</option>{supportedCurrencies.filter(c=>currencyDigits(c)===2).map(c=><option key={c}>{c}</option>)}</select></label>
+   <label>Statement currency<select required className="field" value={currency} onChange={e=>setCurrency(e.target.value)}><option value="">Choose printed currency</option>{supportedCurrencies.filter(c=>currencyDigits(c)===2).map(c=><option key={c} value={c}>{c}</option>)}</select></label>
    <label>Statement CSV<input required className="field max-w-full" type="file" accept=".csv,text/csv" onChange={e=>setFile(e.target.files?.[0]??null)}/></label>
    <Button disabled={busy||!cardId||!currency||!file} aria-busy={busy}>{busy?"Parsing…":"Parse and preview statement"}</Button>
   </fieldset></form>}
