@@ -161,7 +161,7 @@ export default function TransactionFilters({params, accounts, categories, onChan
           {(advancedDraft.get("account") || "") !== (params.get("account") || "") && (params.get("batch") || params.get("legacy")) && <p className="mt-3 text-sm text-muted-foreground">Changing the account clears the upload restriction when applied.</p>}
           {advancedDraft.toString() === "period=all" && <p role="status" className="mt-4 text-sm text-muted-foreground">All time, no search, no additional filters.</p>}
           <div className="mt-6 flex flex-wrap gap-2">
-            <Button type="button" variant="outline" className="mr-auto" onClick={() => setAdvancedDraft(new URLSearchParams({period: "all",...(lockedAccountId?{account:String(lockedAccountId)}:{})}))}>Clear all</Button>
+            <Button type="button" variant="outline" className="mr-auto" onClick={() => setAdvancedDraft(new URLSearchParams(lockedAccountId?{account:String(lockedAccountId)}:{}))}>Clear all</Button>
             <Button type="button" variant="outline" onClick={() => setAdvancedDraft(null)}>Cancel</Button>
             <Button type="submit">Apply</Button>
           </div>

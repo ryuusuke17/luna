@@ -13,7 +13,9 @@ export function currentMonth(now = new Date()): string {
 
 export function normalizeTransactionFilters(input: URLSearchParams, now = new Date()): URLSearchParams {
   const params = new URLSearchParams(input);
-  if (!params.toString()) params.set("month", currentMonth(now));
+  if (!params.has("month") && !params.has("start") && !params.has("end") && params.get("period") !== "all") {
+    params.set("month", currentMonth(now));
+  }
   if (params.get("start") || params.get("end")) {
     params.delete("month");
     params.delete("period");
@@ -58,15 +60,14 @@ export function transactionDateLabel(params: URLSearchParams): string {
   return `${format(date.start)} - ${format(date.end)}`;
 }
 
-export function applyTransactionFilters(current: URLSearchParams, draft: URLSearchParams): URLSearchParams {
+export function applyTransactionFilters(current: URLSearchParams, draft: URLSearchParams, now = new Date()): URLSearchParams {
   const next = new URLSearchParams(draft);
   next.delete("page");
   next.delete("id");
   if ((current.get("account") || "") !== (next.get("account") || "")) {
     for (const key of ["batch", "legacy", "importId"]) next.delete(key);
   }
-  if (!next.toString()) next.set("period", "all");
-  return normalizeTransactionFilters(next);
+  return normalizeTransactionFilters(next, now);
 }
 
 export function applyTransactionDate(current: URLSearchParams, date: TransactionDateFilter): URLSearchParams {

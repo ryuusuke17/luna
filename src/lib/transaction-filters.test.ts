@@ -47,12 +47,16 @@ test("month-only adapters validate boundaries without changing detail URL IDs", 
   assert.equal(month.toString(), "month=2026-01&id=42");
 });
 
-test("contextual and All time URLs never acquire a default month", () => {
-  for (const query of ["period=all", "account=4", "batch=6&account=4", "legacy=csv&importId=3", "id=42", "kind=installment", "search=merchant", "page=2"]) {
+test("contextual and All time URLs respect date modes", () => {
+  for (const query of ["period=all"]) {
     const normalized = normalizeTransactionFilters(params(query));
     assert.equal(normalized.get("month"), null);
     assert.equal(normalized.get("period"), "all");
     for (const [key, value] of params(query)) assert.equal(normalized.get(key), value);
+  }
+  for (const query of ["account=4", "batch=6&account=4", "legacy=csv&importId=3", "id=42", "kind=installment", "search=merchant", "page=2"]) {
+    const normalized = normalizeTransactionFilters(params(query), new Date(2026, 9, 15));
+    assert.equal(normalized.get("month"), "2026-10");
   }
 });
 
@@ -115,7 +119,7 @@ test("advanced drafts apply atomically, reset pages, and only clear uploads for 
     for (const key of ["batch", "legacy", "importId"]) assert.equal(next.get(key), null);
   }
   assert.equal(applyTransactionFilters(original, params("period=all")).toString(), "period=all");
-  assert.equal(applyTransactionFilters(params("search=shop"), params()).toString(), "period=all");
+  assert.equal(applyTransactionFilters(params("search=shop"), params(), new Date(2026, 9, 15)).toString(), "month=2026-10");
 });
 
 test("filter counts exclude date/search/default sorting and count an upload once", () => {

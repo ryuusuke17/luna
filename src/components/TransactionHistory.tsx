@@ -24,7 +24,7 @@ export default function TransactionHistory({accountId,params,onParamsChange}:{ac
  const client=useQueryClient(),[editing,setEditing]=useState<Tx|null>(null),[deleting,setDeleting]=useState<Tx|null>(null),[error,setError]=useState(""),[status,setStatus]=useState(""),[selected,setSelected]=useState<Tx|null>(null);
  const navigate=useNavigate();
  const setParams=onParamsChange;
- const scoped=new URLSearchParams(params);if(accountId){scoped.set("account",String(accountId));if(!["month","start","end"].some(k=>scoped.has(k)))scoped.set("period","all");}
+ const scoped=new URLSearchParams(params);if(accountId){scoped.set("account",String(accountId));}
  const filters=normalizeTransactionFilters(scoped),normalizedParams=filters.toString(),rawParams=params.toString();
  useEffect(()=>{if(rawParams!==normalizedParams)setParams(new URLSearchParams(normalizedParams),{replace:true});},[rawParams,normalizedParams,setParams]);
 const start=filters.get("start")??"",end=filters.get("end")??"",source=filters.get("source")??"",month=filters.get("month")??"",kind=filters.get("kind")??"",category=filters.get("category")??"",account=filters.get("account")??"",search=filters.get("search")??"",sort=filters.get("sort")??"newest",page=/^[1-9]\d*$/.test(filters.get("page")??"1")&&Number.isSafeInteger(Number(filters.get("page")??1))?Number(filters.get("page")??1):1,batch=filters.get("batch");
