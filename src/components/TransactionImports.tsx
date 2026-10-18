@@ -48,12 +48,14 @@ export default function TransactionImports({batch,account,onSelectBatch,onLegacy
     <div className="flex flex-wrap gap-3"><Button variant="outline" onClick={()=>onSelectBatch(item.id,item.account_id)}>View upload #{item.id}</Button><a className="quiet inline-flex min-h-11 items-center" href={`/api/statements/${item.id}/download`} download>Download original</a><RemoveStatementDialog id={item.id} filename={item.filename} disabled={busy||history.isFetching} onRemoved={()=>{onRemoved(item.id);onStatus("Uploaded statement removed. Ledger transactions unchanged.");void client.invalidateQueries({queryKey:["account-detail"]});requestAnimationFrame(()=>document.getElementById("import-result")?.focus());}}/></div>
    </li>)}</ul>}
    <div className="pt-3 border-t border-border mt-3">
+    {error&&<p role="alert" className="text-destructive text-sm mb-2">{error}</p>}
     <Button variant="destructive" size="sm" disabled={busy} onClick={async()=>{
      if(!window.confirm("Warning: Force purge all statement imports and staged rows from the database?"))return;
      setBusy(true);setError("");
      try{
-      await send("maintenance/purge-imports",{confirm:"PURGE_ALL_IMPORTS"});
+      await send("statements/force-purge-all",{confirm:true});
       await client.invalidateQueries();
+      onRemoved(0);
       onStatus("All statement imports purged from database.");
      }catch(err){setError((err as Error).message);}
      finally{setBusy(false);}
