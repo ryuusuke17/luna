@@ -130,3 +130,32 @@ test("statement-only account navigation, compact URL filters and inline upload v
  expect(state.writes).toEqual([]);expect(state.errors).toEqual([]);
  await page.goto("/accounts?id=1");await expect(page).toHaveURL(/\/accounts\/1$/);await expect(page.getByRole("heading",{name:"Daily bank",exact:true})).toBeVisible();
 });
+
+test("account overview separates statement currencies, due details and ledger; meter stays bounded",async({page})=>{
+ const state=await workspace(page);
+ const snapshot={id:"issued:1",source:"issued",sourceId:1,filename:"April statement.csv",date:"2026-04-30",currency:"PHP",amount:125000,semantics:"debt-positive",status:"issued",eligible:true,dueDate:"2026-05-20",minimumDue:5000,download:null,view:""};
+ const account={id:1,name:"BDO ShopMore Mastercard ".repeat(3),type:"credit_card",issuer:"BDO",product:"ShopMore Mastercard",network:"Mastercard",last4:"4321",balance:-90000,credit_limit:100000,opening_date:"2025-01-01",display:{source:"statement",count:2,date:snapshot.date,snapshots:[snapshot,{...snapshot,id:"issued:2",sourceId:2,currency:"USD",amount:2500,minimumDue:null,dueDate:null}],reason:null}};
+ await page.route("**/api/accounts/1",route=>route.fulfill({json:{account,history:{items:[],total:0,page:1,pageSize:25}}}));
+ await page.goto("/accounts/1");
+ const header=page.locator("header[aria-label$='account details']"),php=header.getByLabel("Latest PHP statement",{exact:true}),usd=header.getByLabel("Latest USD statement",{exact:true});
+ await expect(php).toContainText("₱1,250.00");await expect(php).toContainText("2026-05-20");await expect(php).toContainText("₱50.00");
+ await expect(usd).toContainText(/25\.00/);await expect(usd.getByText("Not provided",{exact:true})).toHaveCount(2);
+ await expect(header.getByLabel("Ledger reference",{exact:true})).toContainText("₱900.00");
+ await expect(header.getByRole("meter")).toHaveAttribute("aria-valuenow","100");await expect(header.getByRole("meter")).toHaveAttribute("aria-valuetext",/125% utilized/);
+ await expect(header.getByText("Over the recorded credit limit",{exact:true})).toBeVisible();
+ for(const width of [320,640,1200]){await page.setViewportSize({width,height:800});await expect(php).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);}
+ await header.getByRole("link",{name:"Import statements",exact:true}).focus();await expect(header.getByRole("link",{name:"Import statements",exact:true})).toBeFocused();
+ expect(state.errors).toEqual([]);expect(state.writes).toEqual([]);
+});
+
+test("missing statements never relabel ledger balances as statement values",async({page})=>{
+ const state=await workspace(page);
+ const account={id:1,name:"No statement",type:"credit_card",balance:10000,credit_limit:100000,opening_date:"2025-01-01",display:{source:"ledger",count:0,date:null,snapshots:[],reason:"No statements uploaded"}};
+ await page.route("**/api/accounts/1",route=>route.fulfill({json:{account,history:{items:[],total:0,page:1,pageSize:25}}}));
+ await page.goto("/accounts/1");
+ const header=page.locator("header[aria-label$='account details']"),summary=header.getByLabel("Statement balance unavailable",{exact:true});
+ await expect(summary.getByText("Not provided",{exact:true})).toHaveCount(3);await expect(summary).not.toContainText("₱100.00");
+ await expect(header.getByLabel("Ledger reference",{exact:true})).toContainText("₱100.00");await expect(header.getByRole("meter")).toHaveAttribute("aria-valuenow","0");
+ await expect(header.getByLabel("Credit utilization",{exact:true})).toContainText("Ledger · PHP");
+ expect(state.errors).toEqual([]);
+});

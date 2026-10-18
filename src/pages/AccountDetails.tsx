@@ -5,12 +5,12 @@ import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/WorkspaceButton";
 import AccountDialog from "@/components/AccountDialog";
 import AccountDeletionDialog from "@/components/AccountDeletionDialog";
-import { AccountIdentity } from "@/components/AccountCard";
+import AccountOverview from "@/components/AccountOverview";
 import CreditCardStatementDetail from "@/components/CreditCardStatementDetail";
 import TransactionImports from "@/components/TransactionImports";
 import LegacyStatementArchives from "@/components/LegacyStatementArchives";
 import { api } from "@/lib/api";
-import { accountLabels, balanceCaption, debtAccount, utilization, type AccountDetail, type AccountSnapshot } from "@/lib/accounts";
+import { type AccountDetail, type AccountSnapshot } from "@/lib/accounts";
 import { formatMoney } from "@/lib/finance";
 
 const sourceLabels = {issued:"Issued credit-card statement",bank:"Bank-statement upload",archive:"Legacy reference archive",historical:"Historical statement import"};
@@ -20,7 +20,7 @@ export default function AccountDetails() {
   const query=new URLSearchParams();
   for(const key of ["month","start","end","search","page"])if(params.has(key))query.set(key,params.get(key)!);
   const detail=useQuery({queryKey:["account-detail",id,query.toString()],queryFn:()=>api<AccountDetail>(`accounts/${encodeURIComponent(id)}?${query}`),placeholderData:(previous,previousQuery)=>previousQuery?.queryKey[1]===id?previous:undefined});
-  const account=detail.data?.account,source=params.get("source"),sourceId=params.get("sourceId"),usage=account?utilization(account):null;
+  const account=detail.data?.account,source=params.get("source"),sourceId=params.get("sourceId");
   useEffect(()=>{heading.current?.focus({preventScroll:true});},[id,Boolean(account)]);
   useEffect(()=>{if(params.has("tab")){const next=new URLSearchParams(params);next.delete("tab");setParams(next,{replace:true});}},[params,setParams]);
   useEffect(()=>{if(source&&sourceId)document.getElementById("account-source")?.focus();},[source,sourceId]);
@@ -39,11 +39,11 @@ export default function AccountDetails() {
   return <div className="min-w-0 space-y-5">
     <Link className="quiet inline-flex min-h-11 items-center gap-2 underline" to="/accounts"><ArrowLeft size={16} aria-hidden/>Back to accounts</Link>
     {detail.isPending?<p role="status">Loading account…</p>:detail.error?<section className="panel space-y-3" role="alert"><h1>Account unavailable</h1><p className="break-words text-destructive">{detail.error.message}</p><Button variant="outline" onClick={()=>detail.refetch()}>Retry account</Button><Button variant="outline" onClick={clear}>Clear filters</Button></section>:account&&<>
-      <header className="panel flex flex-wrap items-start justify-between gap-4" aria-label={`${account.name} account details`}><div className="min-w-0 flex-1 space-y-3"><AccountIdentity account={account}/><h1 ref={heading} tabIndex={-1} className="break-words">{account.name}</h1><p className="break-words text-muted-foreground">{[accountLabels[account.type],account.issuer,account.product,account.last4&&["credit_card","bank"].includes(account.type)?`•••• ${account.last4}`:null].filter(Boolean).join(" · ")}</p><p>{balanceCaption(account.display)}</p>
-        {account.display?.source==="statement"?account.display.snapshots.map(s=><div key={s.id} className="space-y-1"><p className="break-words text-2xl font-semibold tabular-nums">{formatMoney(s.amount!,s.currency)}</p><p className="text-sm">{sourceLabels[s.source]} · {s.date} · {s.semantics==="debt-positive"?(s.amount!<0?"Credit balance":"Debt-positive balance"):"Asset-positive balance"}</p>{account.type==="credit_card"&&<p className="text-sm">Due {s.dueDate??"Not provided"} · Minimum due {s.minimumDue===null?"Not provided":formatMoney(s.minimumDue,s.currency)}</p>}</div>):<><p className="break-words text-2xl font-semibold tabular-nums">{formatMoney(account.balance)}</p><p>{account.display?.reason}</p>{account.type==="credit_card"&&<p className="text-sm">Statement balance: Not provided · Due: Not provided · Minimum due: Not provided</p>}</>}
-        {debtAccount(account.type)&&<p className="text-sm text-muted-foreground">Ledger debt: {formatMoney(Math.max(0,-account.balance))}. Positive ledger balances represent credit, not debt.</p>}
-        {account.type==="credit_card"&&<><p>Limit {account.credit_limit?formatMoney(account.credit_limit):"Not provided"} · PHP</p><p className="text-sm">{usage?`${Math.round(usage.percent)}% utilization · ${usage.source}`:"Utilization: Not provided · No compatible amount/limit currency"}. Not live available credit.</p></>}
-      </div><div className="flex flex-wrap gap-3"><Button variant="outline" onClick={()=>setEditing(true)} disabled={Boolean(account.archived_at)}>Edit details</Button><Button variant="destructive" onClick={()=>setDeleting(true)}>Delete account</Button><Link className="quiet inline-flex min-h-11 items-center underline" to={importUrl}>{account.type==="credit_card"?"Import statements":"Import transactions"}</Link></div></header>
+      <AccountOverview account={account} headingRef={heading}>
+        <Link className="quiet inline-flex min-h-11 items-center rounded-md border px-3 text-sm font-medium hover:bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring" to={importUrl}>{account.type==="credit_card"?"Import statements":"Import transactions"}</Link>
+        <Button variant="outline" onClick={()=>setEditing(true)} disabled={Boolean(account.archived_at)}>Edit details</Button>
+        <Button variant="ghost" className="text-destructive hover:text-destructive" onClick={()=>setDeleting(true)}>Delete account</Button>
+      </AccountOverview>
       <section className="min-w-0 space-y-3" aria-labelledby="statement-uploads-heading" aria-busy={detail.isFetching}>
         <div className="flex flex-wrap items-center justify-between gap-2"><h2 id="statement-uploads-heading">Statement uploads</h2><p className="text-xs text-muted-foreground" role="status">{detail.isFetching?"Updating statements…":`${result?.total??0} uploads · newest statement first`}</p></div>
         <section className="rounded-lg border p-3" aria-label="Statement filters">
