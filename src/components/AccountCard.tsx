@@ -19,17 +19,13 @@ export default function AccountCard({ account }: { account: Account }) {
     <div className="min-w-0"><AccountIdentity account={account}/><h3 className="mt-1"><Link className="luna-account-title" to={`/accounts/${account.id}`} aria-label={`View account details for ${account.name}`}>{account.name}</Link></h3><p className="break-words text-xs">{[accountLabels[account.type],account.issuer,account.product].filter(Boolean).join(" · ")}</p></div>
     {isCard&&account.last4&&<p className="luna-account-number flex flex-wrap gap-x-2" aria-label={`Card ending in ${account.last4}`}><span aria-hidden>{account.type==="credit_card"?"•••• •••• ••••":"••••"}</span><span aria-hidden>{account.last4}</span></p>}
     <div className="mt-auto flex min-w-0 flex-wrap items-end gap-3">
-      {account.type!=="credit_card"?(
+      {account.type!=="credit_card"&&(
         <div className="min-w-0 flex-1 basis-40">
           <p className="text-xs">{debtAccount(account.type)?account.balance>0?"Recorded credit balance":"Outstanding balance":"Current balance"}</p>
           <p className="luna-account-balance mt-1">{formatMoney(debtAccount(account.type)?Math.abs(account.balance):account.balance)}</p>
         </div>
-      ):account.display?.snapshots?.length?(
-        <div className="min-w-0 flex-1 basis-40">
-          {account.display.snapshots.map(s=><p key={s.id} className="text-xs">Statement snapshot · {s.date}: {formatMoney(s.amount!,s.currency)}</p>)}
-        </div>
-      ):null}
-      {isCard&&account.network&&<span className="ml-auto flex h-10 max-w-full shrink-0 items-end justify-end">{network?<img src={network} alt={account.network} className="max-h-full w-16 object-contain object-right-bottom"/>:<span className="max-w-24 break-words text-right text-sm">{account.network}</span>}</span>}
+      )}
+      {isCard&&account.network&&<span className="ml-auto flex h-12 max-w-full shrink-0 items-end justify-end">{network?<img src={network} alt={account.network} className="max-h-full w-20 object-contain object-right-bottom"/>:<span className="max-w-28 break-words text-right text-base font-medium">{account.network}</span>}</span>}
     </div>
     {account.type==="credit_card"&&<div className="min-w-0 space-y-1 text-xs">
       <p className="flex flex-wrap items-center gap-x-2">
