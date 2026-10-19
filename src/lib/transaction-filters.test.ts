@@ -119,7 +119,7 @@ test("advanced drafts apply atomically, reset pages, and only clear uploads for 
     for (const key of ["batch", "legacy", "importId"]) assert.equal(next.get(key), null);
   }
   assert.equal(applyTransactionFilters(original, params("period=all")).toString(), "period=all");
-  assert.equal(applyTransactionFilters(params("search=shop"), params(), new Date(2026, 9, 15)).toString(), "month=2026-10");
+  assert.equal(applyTransactionFilters(params("search=shop"), params(), new Date(2026, 9, 15)).toString(), "month=2026-10&dateMode=calendar");
 });
 
 test("filter counts exclude date/search/default sorting and count an upload once", () => {
@@ -137,4 +137,26 @@ test("date labels remain readable for month, closed/open ranges, and malformed l
   assert.equal(transactionDateLabel(params("month=bad")), "Invalid month");
   assert.equal(transactionDateLabel(params("start=2026-02-29")), "Invalid date range");
   assert.equal(transactionDateFilter(params("month=2026-10"), new Date(2026, 9, 15)).month, "2026-10");
+});
+
+
+test("statement identity suppresses posted dates, clears uploads and resets selection/page", () => {
+  const original=params("account=4&month=2026-08&start=2026-08-01&end=2026-08-31&batch=6&legacy=csv&importId=3&search=shop&page=3&id=42");
+  const next=applyTransactionDate(original,{mode:"statement",issuedStatement:"9",month:"",start:"",end:""});
+  assert.equal(next.get("issuedStatement"),"9");
+  assert.equal(next.get("dateMode"),"statement");
+  for(const key of ["month","start","end","period","batch","legacy","importId","page","id"])assert.equal(next.has(key),false);
+  assert.equal(next.get("account"),"4");assert.equal(next.get("search"),"shop");
+  assert.equal(transactionDateFilter(next).mode,"statement");
+  assert.equal(transactionDateLabel(next),"Statement #9");
+  assert.equal(adjacentTransactionMonth(next,-1),null);
+  assert.equal(normalizeTransactionFilters(params("dateMode=statement")).has("month"),false);
+  assert.equal(normalizeTransactionFilters(params("issuedStatement=9&month=2026-08&start=2026-08-01")).has("month"),false);
+  for(const id of ["", "0", "-1", "1.5", "9007199254740992", "bad"])assert.throws(()=>applyTransactionDate(next,{mode:"statement",issuedStatement:id,month:"",start:"",end:""}));
+  const same=applyTransactionFilters(next,new URLSearchParams(next));assert.equal(same.get("issuedStatement"),"9");
+  const changed=new URLSearchParams(next);changed.set("account","5");
+  const applied=applyTransactionFilters(next,changed);assert.equal(applied.has("issuedStatement"),false);assert.equal(applied.has("dateMode"),false);assert.equal(applied.get("period"),"all");
+  const calendar=applyTransactionDate(next,{mode:"month",month:"2026-08",start:"",end:""});
+  assert.equal(calendar.get("dateMode"),"calendar");assert.equal(calendar.has("issuedStatement"),false);
+  for(const mode of ["range","all"] as const){const result=applyTransactionDate(next,{mode,month:"",start:"2026-07-01",end:""});assert.equal(result.has("issuedStatement"),false);assert.equal(result.has("dateMode"),false);}
 });

@@ -183,7 +183,7 @@ test("legacy links, pagination, search, refresh and browser history preserve dat
   await page.goto("/transactions?month=2026-04&start=2024-02-29&end=2024-02-29");
   await expect(page).not.toHaveURL(/month=/);
   await expect(page.getByRole("row").filter({hasText: "Leap purchase"})).toBeVisible();
-  await page.goto("/transactions?account=2&batch=6");
+  await page.goto("/transactions?account=2&batch=6&period=all");
   await expect(dateButton(page)).toHaveText("All time");
   await expect(page.getByRole("row").filter({hasText: "Silicon Valley"})).toBeVisible();
   await searchInput(page).fill("Silicon");
@@ -193,7 +193,7 @@ test("legacy links, pagination, search, refresh and browser history preserve dat
   await page.getByLabel("Month", {exact: true}).fill("2026-04");
   await page.getByRole("dialog").getByRole("button", {name: "Apply", exact: true}).click();
   expect(new URL(page.url()).searchParams.get("batch")).toBe("6");
-  await page.goto("/transactions?legacy=csv&importId=3");
+  await page.goto("/transactions?legacy=csv&importId=3&period=all");
   await expect(filterButton(page)).toHaveAccessibleName("Filter, 1 active filter");
   await expect(dateButton(page)).toHaveText("All time");
   await filterButton(page).click();
@@ -214,12 +214,12 @@ test("legacy links, pagination, search, refresh and browser history preserve dat
   await page.getByRole("combobox", {name: "Type", exact: true}).selectOption("installment");
   await page.getByRole("dialog").getByRole("button", {name: "Apply", exact: true}).click();
   await page.reload();
-  await expect(page).toHaveURL(/month=2026-04&kind=installment/);
+  await expect(page).toHaveURL(/month=2026-04&dateMode=calendar&kind=installment/);
   await page.goBack();
-  await expect(page).toHaveURL(/\?month=2026-04$/);
+  await expect(page).toHaveURL(/\?month=2026-04&dateMode=calendar$/);
   await page.goBack();
   await expect(page).toHaveURL(/\?period=all$/);
-  await page.goto("/transactions?id=12");
+  await page.goto("/transactions?id=12&period=all");
   await expect(page.getByRole("dialog")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(dateButton(page)).toHaveText("All time");
@@ -336,7 +336,7 @@ test("posted-date filters, installment/category combinations and Clear all leave
   page.on("request", request => {
     if (request.url().includes("/api/") && request.method() !== "GET") mutations.push(request.url());
   });
-  await page.goto(`/transactions?account=${account.id}&batch=${upload.id}`);
+  await page.goto(`/transactions?account=${account.id}&batch=${upload.id}&period=all`);
   await expect(dateButton(page)).toHaveText("All time");
   await expect(page.getByRole("row").filter({hasText: `Leap purchase ${stamp}`})).toBeVisible();
   await dateButton(page).click();
@@ -426,4 +426,117 @@ test("transaction rows combine category and description with type icons before d
   const item=page.getByRole("list",{name:"Posted transactions"}).getByRole("listitem");
   await expect(item).toContainText("Food ㆍ Lunch");
   await expect(item.locator(".record-meta").locator("svg")).toBeVisible();
+});
+
+
+async function issuedWorkspace(page: Page) {
+  const state=await filterWorkspace(page);
+  const issues=[
+    {id:91,card_id:2,card_name:"Everyday card",statement_date:"2026-08-25",currency:"USD",filename:"August separate USD.csv"},
+    {id:90,card_id:2,card_name:"Everyday card",statement_date:"2026-08-15",currency:"PHP",filename:"August issue with a very long source filename ".repeat(3)+".csv"},
+    {id:89,card_id:2,card_name:"Everyday card",statement_date:"2026-06-15",currency:"PHP",filename:"June older.csv"},
+  ];
+  const statementRequests:URLSearchParams[]=[];
+  let legacyCount=1,fail=false;
+  await page.route(/\/api\/credit-card-statements(?:\?|$)/,async route=>{
+    const q=new URL(route.request().url()).searchParams;statementRequests.push(q);
+    if(fail){await route.fulfill({status:503,json:{message:"Statements temporarily unavailable"}});return;}
+    const selected=q.get("month")==="2026-08"?issues.slice(1,1+legacyCount):[];
+    const scoped=q.get("cards")&&q.get("cards")!=="2"?[]:issues;
+    const number=Number(q.get("page")||1);
+    await route.fulfill({json:{items:q.has("month")?selected:scoped.slice((number-1)*2,number*2),page:number,pageSize:2,total:q.has("month")?selected.length:scoped.length,metrics:[],cards:[{id:2,selectedIssues:selected}],allCards:[],issuers:[]}});
+  });
+  await page.route(/\/api\/transactions(?:\?|$)/,async(route)=>{
+    const q=new URL(route.request().url()).searchParams;
+    if(!q.has("issuedStatement")){await route.fallback();return;}
+    state.requests.push(new URLSearchParams(q));
+    const items=q.get("issuedStatement")==="90"?[{id:200,posted_date:"2026-07-25",merchant:"Linked July purchase",description:"Corrected linked row",kind:"expense",account_id:2,account_name:"Everyday card",amount:1000,source:"import",balance_impacts:[],version:"1"}]:[];
+    await route.fulfill({json:{items,total:items.length,pageSize:20}});
+  });
+  return {...state,issues,statementRequests,setLegacyCount:(count:number)=>{legacyCount=count;},failNext:()=>{fail=true;},recover:()=>{fail=false;}};
+}
+
+test("exact statement picker scopes choices, paginates, navigates issues and preserves history without date bounds",async({page})=>{
+  const state=await issuedWorkspace(page);
+  await page.goto("/transactions?account=2&batch=6&month=2026-08&page=3");
+  await dateButton(page).focus();await page.keyboard.press("Enter");
+  const chooser=page.getByRole("dialog",{name:"Date filter",exact:true});
+  await chooser.getByRole("combobox",{name:"Date mode",exact:true}).selectOption("statement");
+  await expect(chooser.getByRole("button",{name:"Apply",exact:true})).toBeDisabled();
+  const select=chooser.getByRole("combobox",{name:"Statement",exact:true});
+  await expect(select.getByRole("option")).toHaveCount(3);
+  await expect(select.getByRole("option",{name:/Everyday card · 2026-08-15 · PHP/})).toBeAttached();
+  await select.selectOption("90");
+  await chooser.getByRole("button",{name:"Apply",exact:true}).focus();await page.keyboard.press("Enter");
+  await expect(dateButton(page)).toBeFocused();
+  await expect(page).toHaveURL(/issuedStatement=90/);
+  for(const key of ["month","start","end","batch","page","id"])expect(new URL(page.url()).searchParams.has(key)).toBe(false);
+  await expect(page.getByRole("row").filter({hasText:"Linked July purchase"})).toBeVisible();
+  expect(state.requests.filter(q=>q.has("issuedStatement")).every(q=>!q.has("month")&&!q.has("start")&&!q.has("end"))).toBe(true);
+  await page.reload();await expect(dateButton(page)).toContainText("2026-08-15");
+  const previous=page.getByRole("button",{name:"Previous statement",exact:true}),next=page.getByRole("button",{name:"Next statement",exact:true});
+  await next.click();await expect(page).toHaveURL(/issuedStatement=91/);await expect(next).toBeDisabled();
+  await expect(page.getByText("No linked transactions for this statement.",{exact:false})).toBeVisible();
+  await expect(page.getByRole("link",{name:"Review source statement"})).toHaveAttribute("href","/statements?document=91");
+  await page.goBack();await expect(page).toHaveURL(/issuedStatement=90/);
+  await page.goForward();await expect(page).toHaveURL(/issuedStatement=91/);
+  await previous.click();await expect(page).toHaveURL(/issuedStatement=90/);
+  await previous.click();await expect(page).toHaveURL(/issuedStatement=89/);await expect(previous).toBeDisabled();
+  expect(state.statementRequests.some(q=>q.get("page")==="2")).toBe(true);
+  expect(state.statementRequests.every(q=>q.get("cards")==="2")).toBe(true);
+  await filterButton(page).click();await page.getByRole("combobox",{name:"Account",exact:true}).selectOption("1");
+  await page.getByRole("dialog",{name:"Filter transactions"}).getByRole("button",{name:"Apply",exact:true}).click();
+  expect(new URL(page.url()).searchParams.has("issuedStatement")).toBe(false);
+  expect(state.workspace.requests.every(request=>request.method==="GET")).toBe(true);
+});
+
+test("legacy card issue month resolves unique match; ambiguous and missing issues never fetch calendar activity",async({page})=>{
+  const state=await issuedWorkspace(page);
+  await page.goto("/accounts/2?account=2&month=2026-08&search=linked&sort=oldest");
+  await expect(page).toHaveURL(/issuedStatement=90/);
+  expect(new URL(page.url()).searchParams.get("search")).toBe("linked");
+  expect(new URL(page.url()).searchParams.get("sort")).toBe("oldest");
+  expect(state.requests.every(q=>q.has("issuedStatement"))).toBe(true);
+  state.setLegacyCount(2);state.requests.length=0;
+  await page.goto("/accounts/2?account=2&month=2026-08");
+  await expect(page.getByText("Multiple statements issued in this month. Choose a statement explicitly.")).toBeVisible();
+  expect(state.requests).toHaveLength(0);
+  await dateButton(page).click();await page.getByRole("combobox",{name:"Statement",exact:true}).selectOption("91");
+  await page.getByRole("dialog",{name:"Date filter",exact:true}).getByRole("button",{name:"Apply",exact:true}).click();
+  await expect(page).toHaveURL(/issuedStatement=91/);
+  await page.goto("/accounts/2?account=2&month=2026-09");
+  await expect(page.getByText("No statement issued in this month for this account. Choose another statement or Calendar month.")).toBeVisible();
+  await dateButton(page).click();await page.getByRole("combobox",{name:"Date mode",exact:true}).selectOption("month");
+  await page.getByLabel("Month",{exact:true}).fill("2026-09");
+  await page.getByRole("dialog",{name:"Date filter",exact:true}).getByRole("button",{name:"Apply",exact:true}).click();
+  await expect(page).toHaveURL(/dateMode=calendar/);await page.reload();await expect(dateButton(page)).toHaveText("September 2026");
+  expect(state.requests.some(q=>q.get("month")==="2026-09"&&q.get("dateMode")==="calendar")).toBe(true);
+});
+
+test("statement picker exposes loading, retry, empty scope and keyboard focus; long labels fit touch layouts",async({page})=>{
+  const state=await issuedWorkspace(page);state.failNext();
+  await page.goto("/transactions?account=2&period=all");
+  await dateButton(page).click();const chooser=page.getByRole("dialog",{name:"Date filter",exact:true});
+  await page.getByRole("combobox",{name:"Date mode",exact:true}).selectOption("statement");
+  await expect(chooser.getByRole("button",{name:"Retry statements"})).toBeVisible({timeout:15000});
+  await expect(chooser.getByRole("button",{name:"Apply",exact:true})).toBeDisabled();
+  state.recover();await chooser.getByRole("button",{name:"Retry statements"}).click();
+  await page.getByRole("combobox",{name:"Statement",exact:true}).selectOption("90");
+  await chooser.getByRole("button",{name:"Load older statements"}).click();
+  await expect(page.getByRole("combobox",{name:"Statement",exact:true}).getByRole("option",{name:/June older/})).toBeAttached();
+  await page.keyboard.press("Escape");await expect(dateButton(page)).toBeFocused();
+  for(const width of [1440,390,320]){
+    await page.setViewportSize({width,height:900});await dateButton(page).focus();await page.keyboard.press("Enter");
+    await page.getByRole("combobox",{name:"Date mode",exact:true}).selectOption("statement");
+    const select=page.getByRole("combobox",{name:"Statement",exact:true});await select.focus();await page.keyboard.press("Home");await page.keyboard.press("ArrowDown");await page.keyboard.press("ArrowDown");
+    await select.selectOption("90");
+    expect(await select.evaluate(el=>{const style=getComputedStyle(el);return style.outlineStyle!=="none"||style.boxShadow!=="none";})).toBe(true);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    await chooser.getByRole("button",{name:"Apply",exact:true}).focus();await page.keyboard.press("Enter");
+    await expect(dateButton(page)).toBeFocused();await expect(dateButton(page)).toContainText("2026-08-15");
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  }
+  await page.goto("/transactions?account=1&dateMode=statement");await dateButton(page).click();
+  await expect(chooser.getByText("No statements available for this account.")).toBeVisible();
+  await expect(chooser.getByRole("button",{name:"Apply",exact:true})).toBeDisabled();
 });

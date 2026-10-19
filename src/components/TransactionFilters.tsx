@@ -1,5 +1,5 @@
-import {useId, useState} from "react";
-import {useQuery} from "@tanstack/react-query";
+import {useEffect, useId, useState} from "react";
+import {useInfiniteQuery} from "@tanstack/react-query";
 import {CalendarDays, ChevronDown, ChevronLeft, ChevronRight, SlidersHorizontal} from "lucide-react";
 import {Button} from "@/components/WorkspaceButton";
 import DialogContent from "@/components/WorkspaceDialogContent";
@@ -7,7 +7,7 @@ import {Dialog, DialogDescription, DialogHeader, DialogTitle, DialogTrigger} fro
 import {Popover, PopoverContent, PopoverTrigger} from "@/components/ui/popover";
 import {TRANSACTION_TYPES, transactionTypeLabel} from "@/lib/transactions";
 import {adjacentTransactionMonth, applyTransactionDate, applyTransactionFilters, transactionDateFilter, transactionDateLabel, transactionFilterCount, type TransactionDateFilter} from "@/lib/transaction-filters";
-import {statementMonthLabel} from "@/lib/credit-card-dashboard";
+import type {CardStatement, StatementDashboard} from "@/lib/credit-card-statements";
 import {api} from "@/lib/api";
 
 type Choice = {id: number; name: string};
@@ -22,19 +22,44 @@ type Props = {
 export default function TransactionFilters({params, accounts, categories, onChange, lockedAccountId}: Props) {
   const dateTitle = useId();
   const [dateOpen, setDateOpen] = useState(false);
-  const dashboard = useQuery({
-    queryKey: ["credit-card-dashboard", "latest-month"],
-    queryFn: () => api<{availableMonths: string[]}>("credit-card-dashboard"),
-    staleTime: 60_000,
-  });
-  const statementMonths = dashboard.data?.availableMonths ?? [];
-  const latestStatementMonth = statementMonths[0];
-
   const [dateDraft, setDateDraft] = useState<TransactionDateFilter>(() => transactionDateFilter(params));
+
+  const account = String(lockedAccountId ?? params.get("account") ?? "");
+  const date = transactionDateFilter(params);
+  const statements = useInfiniteQuery({
+    queryKey: ["issued-statement-choices", account],
+    initialPageParam: 1,
+    queryFn: ({pageParam}) => api<StatementDashboard>(`credit-card-statements?${new URLSearchParams({...account ? {cards: account} : {}, page: String(pageParam)})}`),
+    getNextPageParam: last => last.page * last.pageSize < last.total ? last.page + 1 : undefined,
+    enabled: dateOpen && dateDraft.mode === "statement" || date.mode === "statement",
+  });
+  const choices = statements.data?.pages.flatMap(page => page.items) ?? [];
+  const selectedIndex = choices.findIndex(item => String(item.id) === date.issuedStatement);
+  const statementLabel = (item: CardStatement) => `${item.card_name} · ${item.statement_date} · ${item.currency} · ${item.filename} (#${item.id})`;
+  useEffect(() => {
+    if (date.issuedStatement && selectedIndex < 0 && statements.hasNextPage && !statements.isFetching && !statements.isFetchNextPageError) void statements.fetchNextPage();
+  }, [date.issuedStatement, selectedIndex, statements.hasNextPage, statements.isFetching, statements.isFetchNextPageError, statements.fetchNextPage]);
+
   const [dateError, setDateError] = useState("");
   const [advancedDraft, setAdvancedDraft] = useState<URLSearchParams | null>(null);
-  const count = transactionFilterCount(params), dateLabel = transactionDateLabel(params);
+  const count = transactionFilterCount(params), dateLabel = date.mode === "statement" && selectedIndex >= 0 ? statementLabel(choices[selectedIndex]) : transactionDateLabel(params);
   const previousMonth = adjacentTransactionMonth(params, -1), nextMonth = adjacentTransactionMonth(params, 1);
+
+  const validStatement = choices.some(item => String(item.id) === dateDraft.issuedStatement);
+  async function navigateDate(direction: -1 | 1) {
+    if (date.mode !== "statement") {
+      const month = direction === -1 ? previousMonth : nextMonth;
+      if (month) onChange(applyTransactionDate(params, {mode: "month", month, start: "", end: ""}));
+      return;
+    }
+    const index = selectedIndex - direction;
+    let choice = choices[index];
+    if (!choice && direction === -1 && statements.hasNextPage) {
+      const result = await statements.fetchNextPage();
+      choice = result.data?.pages.flatMap(page => page.items)[index];
+    }
+    if (choice) onChange(applyTransactionDate(params, {...date, issuedStatement: String(choice.id)}));
+  }
 
   function changeAdvanced(key: string, value: string) {
     setAdvancedDraft(current => {
@@ -49,32 +74,30 @@ export default function TransactionFilters({params, accounts, categories, onChan
     <Popover open={dateOpen} onOpenChange={open => {
       if (open) {
         const currentFilter = transactionDateFilter(params);
-        if (!params.has("month") && !params.has("start") && !params.has("end") && latestStatementMonth) {
-          currentFilter.month = latestStatementMonth;
-        }
         setDateDraft(currentFilter);
         setDateError("");
       }
       setDateOpen(open);
     }}>
       <div role="group" aria-label="Date navigation" className="col-span-2 flex min-w-0 rounded-full border border-input bg-background sm:col-span-1 sm:max-w-sm">
-        <Button type="button" variant="ghost" size="icon" className="h-auto shrink-0 rounded-r-none" aria-label="Previous month" disabled={!previousMonth} onClick={() => previousMonth && onChange(applyTransactionDate(params, {mode: "month", month: previousMonth, start: "", end: ""}))}>
+        <Button type="button" variant="ghost" size="icon" className="h-auto shrink-0 rounded-r-none" aria-label={date.mode === "statement" ? "Previous statement" : "Previous month"} disabled={date.mode === "statement" ? selectedIndex < 0 || statements.isFetching || selectedIndex === choices.length - 1 && !statements.hasNextPage : !previousMonth} onClick={() => void navigateDate(-1)}>
           <ChevronLeft aria-hidden="true"/>
         </Button>
         <PopoverTrigger asChild>
           <Button variant="ghost" className="h-auto min-w-0 flex-1 gap-2 whitespace-normal rounded-none px-2 text-center" aria-label={`Date filter: ${dateLabel}`}>
             <CalendarDays className="size-4 shrink-0" aria-hidden="true"/>
-            <span className="min-w-0">{dateLabel}</span>
+            <span className="min-w-0 break-words [overflow-wrap:anywhere]">{dateLabel}</span>
           </Button>
         </PopoverTrigger>
-        <Button type="button" variant="ghost" size="icon" className="h-auto shrink-0 rounded-l-none" aria-label="Next month" disabled={!nextMonth} onClick={() => nextMonth && onChange(applyTransactionDate(params, {mode: "month", month: nextMonth, start: "", end: ""}))}>
+        <Button type="button" variant="ghost" size="icon" className="h-auto shrink-0 rounded-l-none" aria-label={date.mode === "statement" ? "Next statement" : "Next month"} disabled={date.mode === "statement" ? selectedIndex <= 0 || statements.isFetching : !nextMonth} onClick={() => void navigateDate(1)}>
           <ChevronRight aria-hidden="true"/>
         </Button>
       </div>
-      <PopoverContent align="start" collisionPadding={16} className="max-h-[var(--radix-popover-content-available-height)] w-[min(22rem,calc(100vw-2rem))] overflow-y-auto rounded-xl p-5 shadow-none" aria-labelledby={dateTitle}>
+      <PopoverContent align="start" collisionPadding={16} className="max-h-[var(--radix-popover-content-available-height)] w-[min(22rem,calc(100vw-2rem))] overflow-y-auto rounded-xl p-5 shadow-none" aria-label="Date filter" aria-labelledby={dateTitle}>
         <form noValidate onSubmit={event => {
           event.preventDefault();
           try {
+            if (dateDraft.mode === "statement" && !validStatement) throw Error("Choose a valid statement.");
             onChange(applyTransactionDate(params, dateDraft));
             setDateOpen(false);
           } catch (error) {
@@ -82,37 +105,36 @@ export default function TransactionFilters({params, accounts, categories, onChan
           }
         }}>
           <h2 id={dateTitle} className="text-lg font-semibold">Date filter</h2>
-          <p className="mb-4 mt-1 text-sm text-muted-foreground">Filter by statement.</p>
+          <p className="mb-4 mt-1 text-sm text-muted-foreground">Choose statement membership or posted dates.</p>
           <label className="block">Date mode
             <select className="field" value={dateDraft.mode} onChange={event => {
               setDateDraft({...dateDraft, mode: event.target.value as TransactionDateFilter["mode"]});
               setDateError("");
             }}>
-              <option value="month">Per statement</option>
+              <option value="statement">Per statement</option>
+              <option value="month">Calendar month</option>
               <option value="range">Custom range</option>
               <option value="all">All time</option>
             </select>
           </label>
-          {dateDraft.mode === "month" && <div className="mt-4 space-y-3">
-            {statementMonths.length > 0 ? (
-              <label className="block">Statement
-                <select className="field" value={dateDraft.month} onChange={event => setDateDraft({...dateDraft, month: event.target.value})}>
-                  <option value="">Choose statement</option>
-                  {statementMonths.map(m => (
-                    <option key={m} value={m}>{statementMonthLabel(m)}</option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
-            <label className="block">{statementMonths.length > 0 ? "Or custom statement month" : "Statement month"}
-              <input className="field" type="month" value={dateDraft.month} onChange={event => setDateDraft({...dateDraft, month: event.target.value})}/>
-            </label>
-            {latestStatementMonth && latestStatementMonth !== dateDraft.month && (
-              <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => setDateDraft({...dateDraft, month: latestStatementMonth})}>
-                Jump to latest statement ({statementMonthLabel(latestStatementMonth)})
-              </Button>
-            )}
+          {dateDraft.mode === "statement" && <div className="mt-4 min-w-0 space-y-3">
+            {statements.isPending && <p role="status">Loading statements…</p>}
+            {statements.isError && <div role="alert"><p className="text-destructive">{statements.error.message}</p><Button type="button" variant="outline" onClick={() => statements.isFetchNextPageError ? statements.fetchNextPage() : statements.refetch()}>Retry statements</Button></div>}
+            {!statements.isPending && !statements.isError && !choices.length && <p role="status">No statements available for this account.</p>}
+            {choices.length > 0 && <label className="block min-w-0">Statement
+              <select className="field w-full min-w-0" value={validStatement ? dateDraft.issuedStatement : ""} onChange={event => {setDateDraft({...dateDraft, issuedStatement: event.target.value}); setDateError("");}}>
+                <option value="">Choose statement</option>
+                {choices.map(item => <option key={item.id} value={item.id}>{statementLabel(item)}</option>)}
+              </select>
+            </label>}
+            {validStatement && <p className="break-words text-sm [overflow-wrap:anywhere]">{statementLabel(choices.find(item => String(item.id) === dateDraft.issuedStatement)!)}</p>}
+            {dateDraft.issuedStatement && !validStatement && !statements.isFetching && !statements.hasNextPage && <p role="alert">Selected statement unavailable for this account. Choose another statement.</p>}
+            {statements.hasNextPage && <Button type="button" variant="outline" disabled={statements.isFetching} onClick={() => statements.fetchNextPage()}>{statements.isFetching ? "Loading statements…" : "Load older statements"}</Button>}
+            <p className="text-sm text-muted-foreground">Includes linked ledger transactions, regardless of posting date. Clears date and upload restrictions.</p>
           </div>}
+          {dateDraft.mode === "month" && <label className="mt-4 block">Month
+            <input className="field" type="month" value={dateDraft.month} onChange={event => setDateDraft({...dateDraft, month: event.target.value})}/>
+          </label>}
           {dateDraft.mode === "range" && <div className="mt-4 grid gap-3">
             <label>Start date<input className="field" type="date" value={dateDraft.start} onChange={event => setDateDraft({...dateDraft, start: event.target.value})}/></label>
             <label>End date<input className="field" type="date" value={dateDraft.end} onChange={event => setDateDraft({...dateDraft, end: event.target.value})}/></label>
@@ -122,7 +144,7 @@ export default function TransactionFilters({params, accounts, categories, onChan
           {dateError && <p role="alert" className="mt-3 text-sm text-destructive">{dateError}</p>}
           <div className="mt-5 flex flex-wrap justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => setDateOpen(false)}>Cancel</Button>
-            <Button type="submit">Apply</Button>
+            <Button type="submit" disabled={dateDraft.mode === "statement" && (!validStatement || statements.isPending || statements.isError || statements.isFetching)}>Apply</Button>
           </div>
         </form>
       </PopoverContent>
@@ -191,9 +213,9 @@ export default function TransactionFilters({params, accounts, categories, onChan
             }}>Remove upload filter</Button>
           </div>}
           {(advancedDraft.get("account") || "") !== (params.get("account") || "") && (params.get("batch") || params.get("legacy")) && <p className="mt-3 text-sm text-muted-foreground">Changing the account clears the upload restriction when applied.</p>}
-          {advancedDraft.toString() === "period=all" && <p role="status" className="mt-4 text-sm text-muted-foreground">All time, no search, no additional filters.</p>}
+          {advancedDraft.get("period") === "all" && [...advancedDraft.keys()].every(key => key === "period" || key === "account" && Boolean(lockedAccountId)) && <p role="status" className="mt-4 text-sm text-muted-foreground">All time, no search, no additional filters.</p>}
           <div className="mt-6 flex flex-wrap gap-2">
-            <Button type="button" variant="outline" className="mr-auto" onClick={() => setAdvancedDraft(new URLSearchParams(lockedAccountId?{account:String(lockedAccountId)}:{}))}>Clear all</Button>
+            <Button type="button" variant="outline" className="mr-auto" onClick={() => setAdvancedDraft(new URLSearchParams(lockedAccountId?{account:String(lockedAccountId),period:"all"}:{period:"all"}))}>Clear all</Button>
             <Button type="button" variant="outline" onClick={() => setAdvancedDraft(null)}>Cancel</Button>
             <Button type="submit">Apply</Button>
           </div>

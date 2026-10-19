@@ -10,6 +10,16 @@ export default defineHandler(async event=>{
  if(event.req.method==="GET"){
   const q=getQuery(event),where=["t.owner_id=?","t.voided_at IS NULL"],values:any[]=[user.id];
   function integer(key:string){const v=q[key];if(typeof v!=="string"||!/^\d+$/.test(v)||!Number.isSafeInteger(Number(v))||Number(v)<1)throw createError({statusCode:400,statusMessage:`Invalid ${key}`});return Number(v);}
+  if(q.dateMode!==undefined&&!["statement","calendar"].includes(String(q.dateMode)))throw createError({statusCode:400,statusMessage:"Invalid date mode"});
+  if(q.dateMode==="statement"&&q.issuedStatement===undefined)throw createError({statusCode:400,statusMessage:"Choose a statement"});
+  if(q.issuedStatement!==undefined){
+   const statementId=integer("issuedStatement");
+   if(["month","start","end","period","batch","legacy","importId"].some(key=>q[key]!==undefined)||q.dateMode!==undefined&&q.dateMode!=="statement")throw createError({statusCode:400,statusMessage:"Statement filter conflicts with date or upload restrictions"});
+   const statement=db.prepare("SELECT s.card_id FROM cc_statements s JOIN accounts a ON a.id=s.card_id AND a.owner_id=s.owner_id WHERE s.id=? AND s.owner_id=? AND a.type='credit_card'").get(statementId,user.id) as {card_id:number}|undefined;
+   if(!statement)throw createError({statusCode:404,statusMessage:"Statement unavailable"});
+   if(q.account!==undefined&&integer("account")!==statement.card_id)throw createError({statusCode:400,statusMessage:"Statement does not belong to selected account"});
+   where.push("EXISTS(SELECT 1 FROM cc_decision_projection p JOIN cc_statement_lines l ON l.id=p.line_id JOIN cc_statements s ON s.id=l.statement_id WHERE p.owner_id=t.owner_id AND s.owner_id=t.owner_id AND s.id=? AND p.resolved_transaction_id=t.id)");values.push(statementId);
+  }
   if(q.month!==undefined){if(typeof q.month!=="string"||!/^\d{4}-(0[1-9]|1[0-2])$/.test(q.month))throw createError({statusCode:400,statusMessage:"Invalid month"});where.push("substr(t.posted_date,1,7)=?");values.push(q.month);}
   if(q.kind!==undefined){if(typeof q.kind!=="string"||!TRANSACTION_TYPES.some(kind=>kind===q.kind))throw createError({statusCode:400,statusMessage:"Invalid type"});where.push("transaction_type(t.kind,t.is_installment,t.description,t.merchant,t.notes)=?");values.push(q.kind);}
   for(const [key,column] of [["account","t.account_id"],["category","t.category_id"],["id","t.id"]])if(q[key]!==undefined){if(key==="category"&&q[key]==="uncategorized"){where.push("t.category_id IS NULL AND t.kind IN ('expense','income','refund')");continue;}const n=integer(key);where.push(key==="account"?"(t.account_id=? OR t.counter_account_id=?)":`${column}=?`);values.push(key==="id"?resolveTransaction(user.id,n):n);if(key==="account")values.push(n);}

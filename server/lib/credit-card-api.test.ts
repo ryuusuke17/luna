@@ -90,3 +90,51 @@ test("four processes: repeated schema initialization, semantic import race and i
  assert.equal((await json(`credit-card-dashboard?cards=${card}`)).total,1);
  assert.deepEqual(db.pragma('foreign_key_check'),[]);assert.equal(db.pragma('integrity_check',{simple:true}),'ok');
 });
+
+
+test("exact issued-statement membership ignores posting month, deduplicates corrections and validates owner/scope",async()=>{
+ const card=(await json('accounts',{name:'Issue membership card',type:'credit_card',openingDate:'2025-01-01',openingBalance:'0',creditLimit:'50000'})).id;
+ const other=(await json('accounts',{name:'Other issue card',type:'credit_card',openingDate:'2025-01-01',openingBalance:'0',creditLimit:'50000'})).id;
+ const bank=(await json('accounts',{name:'Not a card',type:'bank',openingDate:'2025-01-01',openingBalance:'0'})).id;
+ const issue=(await json('credit-card-statements',{filename:'membership.csv',base64:Buffer.from(sample).toString('base64'),cardId:card,currency:'PHP',confirm:true,acknowledge:true,reviewNote:'Independent membership fixture'})).existingId;
+ const second=(await json('credit-card-statements',{filename:'other-card.csv',base64:Buffer.from(sample).toString('base64'),cardId:other,currency:'PHP',confirm:true,acknowledge:true,reviewNote:'Independent card issue'})).existingId;
+ // Disposable test database only: keep immutable sample bytes; vary issue dates to isolate membership from posting dates.
+ db.prepare("UPDATE cc_statements SET statement_date='2026-08-15' WHERE id IN (?,?)").run(issue,second);
+ let detail=await json('credit-card-statements/'+issue),line=detail.lines.find((l:any)=>l.source.amountSigned>0);
+ await json('credit-card-statements/'+issue,{action:'review-line',lineId:line.id,decision:'import',classification:'expense',reason:'',version:line.review.version,requestKey:randomUUID()});
+ let current=(await json('transactions?issuedStatement='+issue))[0];
+ const corrected=await json('transactions/'+current.id,{kind:'expense',date:'2026-07-25',amount:current.amount,accountId:card,merchant:'July linked purchase',notes:'',idempotencyKey:randomUUID(),version:current.version},'PATCH');
+ current=(await json('transactions?id='+corrected.id))[0];
+ await json('transactions',{kind:'expense',date:'2026-08-15',amount:500,accountId:card,merchant:'Unlinked August purchase',idempotencyKey:randomUUID()});
+ // Two source rows can reference one ledger record. EXISTS must not duplicate result/count.
+ const duplicate=detail.lines.find((l:any)=>l.id!==line.id);
+ db.prepare("INSERT INTO cc_line_decisions(line_id,transaction_id,action,classification,reason,actor_id,request_key,request_json,version) SELECT ?,transaction_id,'link',classification,'fixture',actor_id,?,'{}',version FROM cc_line_decisions WHERE line_id=?").run(duplicate.id,randomUUID(),line.id);
+ const before=await json('export');
+ const selected=await json('transactions?issuedStatement='+issue+'&dateMode=statement&account='+card+'&page=1');
+ assert.equal(selected.total,1);assert.deepEqual(selected.items.map((t:any)=>t.id),[current.id]);assert.equal(selected.items[0].posted_date,'2026-07-25');
+ assert.equal((await json('transactions?issuedStatement='+second+'&page=1')).total,0);
+ assert.equal((await json('transactions?issuedStatement='+issue+'&search=July&source=import&sort=oldest&page=1')).total,1);
+ assert.equal((await json('transactions?issuedStatement='+issue+'&search=August&page=1')).total,0);
+ assert.equal((await json('transactions?issuedStatement='+issue+'&source=manual&page=1')).total,0);
+ assert.equal((await json('transactions?month=2026-08&dateMode=calendar&account='+card+'&page=1')).total,1);
+ for(const id of ['0','-1','1.5','bad','9007199254740992'])assert.equal((await request('transactions?issuedStatement='+id)).status,400);
+ for(const conflict of ['month=2026-08','start=2026-07-01','end=2026-09-01','period=all','batch=1','legacy=csv','importId=1','dateMode=calendar'])assert.equal((await request('transactions?issuedStatement='+issue+'&'+conflict)).status,400);
+ assert.equal((await request('transactions?dateMode=statement')).status,400);
+ assert.equal((await request('transactions?issuedStatement=999999999')).status,404);
+ assert.equal((await request('transactions?issuedStatement='+issue+'&account='+other)).status,400);
+ assert.equal((await request('transactions?issuedStatement='+issue+'&account='+bank)).status,400);
+ assert.equal((await request('transactions?issuedStatement='+issue,undefined,'GET',false)).status,401);
+ const after=await json('export');delete before.exported_at;delete after.exported_at;assert.deepEqual(after,before);
+ const owner=db.prepare("SELECT owner_id FROM cc_statements WHERE id=?").get(second).owner_id;
+ const foreign=Number(db.prepare("INSERT INTO users(username,password_hash) VALUES(?,?)").run('foreign-'+randomUUID(),'unusable-test-hash').lastInsertRowid);
+ db.prepare('UPDATE cc_statements SET owner_id=? WHERE id=?').run(foreign,second);
+ assert.equal((await request('transactions?issuedStatement='+second)).status,404);
+ assert.equal((await json('credit-card-statements?cards='+other)).items.length,0);
+ db.prepare('UPDATE cc_statements SET owner_id=? WHERE id=?').run(owner,second);
+ db.prepare("UPDATE accounts SET type='bank' WHERE id=?").run(other);
+ assert.equal((await request('transactions?issuedStatement='+second)).status,404);
+ db.prepare("UPDATE accounts SET type='credit_card' WHERE id=?").run(other);
+ db.prepare("UPDATE transactions SET voided_at=CURRENT_TIMESTAMP WHERE id=?").run(current.id);
+ assert.equal((await json('transactions?issuedStatement='+issue+'&page=1')).total,0);
+ assert.deepEqual(db.pragma('foreign_key_check'),[]);
+});
