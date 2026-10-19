@@ -52,7 +52,7 @@ test("credit cards keep transparent logos, twelve masked digits and network insi
   const card=page.locator(".luna-account-card"),link=card.getByRole("link"),network=card.getByRole("img",{name:"Mastercard",exact:true});
   await expect(card.getByRole("button")).toHaveCount(0);await expect(card.getByText(/Ledger balance · No statements uploaded/)).toHaveCount(0);
   await expect(card.getByRole("meter")).toHaveAttribute("aria-valuenow","0.95");
-  await expect(card.getByText("1% utilization · Ledger · PHP",{exact:true})).toBeVisible();
+  await expect(card.getByText("1% utilization",{exact:true})).toBeVisible();
   await expect(link).toHaveCSS("min-height","0px");await expect(card.locator("h3")).toHaveCSS("margin-top","4px");
   await expect(card.locator(".luna-account-number")).toHaveText("•••• •••• ••••4321");
   await expect(link).toHaveCSS("text-decoration-line","none");await link.hover();await expect(link).toHaveCSS("text-decoration-line","none");await link.focus();
@@ -115,7 +115,7 @@ test("account history defaults to ledger, locks filters, and keeps non-credit bi
  const state=await workspace(page),requests:string[]=[];
  page.on("request",r=>{if(new URL(r.url()).pathname==="/api/transactions")requests.push(r.url());});
  await page.setViewportSize({width:320,height:740});await page.goto("/accounts");
- await expect(page.getByText("Current recorded ledger balance",{exact:true})).toBeVisible();
+ await expect(page.getByText("Current balance",{exact:true})).toBeVisible();
  await page.getByRole("link",{name:"View account details for Daily bank"}).click();
  await expect(page.getByRole("heading",{name:"Transactions",exact:true})).toBeVisible();
  await expect(page.getByRole("tab",{name:"Statements",exact:true})).toHaveCount(0);

@@ -29,13 +29,13 @@ export default function AccountCard({ account }: { account: Account }) {
           </>
         ):(
           <>
-            <p className="text-xs">{debtAccount(account.type)?account.balance>0?"Recorded credit balance":"Outstanding ledger debt":"Current recorded ledger balance"}</p>
+            <p className="text-xs">{debtAccount(account.type)?account.balance>0?"Recorded credit balance":"Outstanding balance":"Current balance"}</p>
             <p className="luna-account-balance mt-1">{formatMoney(debtAccount(account.type)?Math.abs(account.balance):account.balance)}</p>
           </>
         )}
       </div>
       {isCard&&account.network&&<span className="ml-auto flex h-10 max-w-full shrink-0 items-end justify-end">{network?<img src={network} alt={account.network} className="max-h-full w-16 object-contain object-right-bottom"/>:<span className="max-w-24 break-words text-right text-sm">{account.network}</span>}</span>}
     </div>
-    {account.type==="credit_card"&&<div className="min-w-0 space-y-1 text-xs">{usage?<><p>{Math.round(usage.percent)}% utilization · {usage.source}</p><div className="luna-account-utilization h-2 overflow-hidden rounded-full" role="meter" aria-label={`Credit utilization for ${account.name}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} aria-valuetext={`${Math.round(usage.percent)}% utilization · ${usage.source} · Not live available credit`}><div className="h-full rounded-full" style={{width:`${percent}%`}}/></div></>:<p>Utilization unavailable</p>}</div>}
+    {account.type==="credit_card"&&<div className="min-w-0 space-y-1 text-xs">{usage?<><p>{Math.round(usage.percent)}% utilization</p><div className="luna-account-utilization h-2 overflow-hidden rounded-full" role="meter" aria-label={`Credit utilization for ${account.name}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} aria-valuetext={`${Math.round(usage.percent)}% utilization · Not live available credit`}><div className="h-full rounded-full" style={{width:`${percent}%`}}/></div></>:<p>Utilization unavailable</p>}</div>}
   </li>;
 }
