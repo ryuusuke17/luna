@@ -33,7 +33,7 @@ export default function AccountCard({ account }: { account: Account }) {
         )}
       </div>
       {isCard&&account.network&&(
-        <span className={`ml-auto flex h-12 max-w-full shrink-0 justify-end ${account.type==="credit_card"?"self-center -translate-y-1.5 items-center":"items-end"}`}>
+        <span className={`ml-auto flex h-12 max-w-full shrink-0 justify-end ${account.type==="credit_card"?"self-center -translate-y-7 items-center":"items-end"}`}>
           {network?(
             <img src={network} alt={account.network} className={`max-h-full w-20 object-contain ${account.type==="credit_card"?"object-right":"object-right-bottom"}`}/>
           ):(
