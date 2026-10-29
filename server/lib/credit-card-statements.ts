@@ -113,9 +113,16 @@ export function importCreditCardStatement(owner:number,input:unknown){
   return{duplicate:false,existingId:newId};
  }).immediate();
 }
-const filters=z.object({year:z.string().regex(/^\d{4}$/).optional(),month:z.string().regex(/^\d{4}-(?:0[1-9]|1[0-2])$/).optional(),issuer:z.string().max(240).optional(),cards:z.string().regex(/^\d+(?:,\d+)*$/).max(500).optional(),status:z.enum(["not_tracked","unpaid","partial","paid","past_due_unverified","credit_balance"]).optional(),search:z.string().max(200).optional(),dueStart:date.optional(),dueEnd:date.optional(),page:z.string().regex(/^[1-9]\d{0,5}$/).optional(),sort:z.enum(["newest","oldest","balance"]).optional()}).strict();
+const filters=z.object({issuedStatement:z.string().regex(/^[1-9]\d*$/).refine(value=>Number.isSafeInteger(Number(value)),"Invalid statement ID").optional(),year:z.string().regex(/^\d{4}$/).optional(),month:z.string().regex(/^\d{4}-(?:0[1-9]|1[0-2])$/).optional(),issuer:z.string().max(240).optional(),cards:z.string().regex(/^\d+(?:,\d+)*$/).max(500).optional(),status:z.enum(["not_tracked","unpaid","partial","paid","past_due_unverified","credit_balance"]).optional(),search:z.string().max(200).optional(),dueStart:date.optional(),dueEnd:date.optional(),page:z.string().regex(/^[1-9]\d{0,5}$/).optional(),sort:z.enum(["newest","oldest","balance"]).optional()}).strict();
 export function creditCardStatementScope(owner:number,input:unknown={}){
- const f=filters.parse(input),where=["s.owner_id=?","s.superseded_by IS NULL","a.type='credit_card'"],args:(number|string)[]=[owner];
+ const parsed=filters.safeParse(input);
+ if(!parsed.success){if(parsed.error.issues.some(issue=>issue.path[0]==="issuedStatement"))throw Error("Choose a valid statement ID.");throw parsed.error;}
+ const f=parsed.data,where=["s.owner_id=?","s.superseded_by IS NULL","a.type='credit_card'"],args:(number|string)[]=[owner];
+ if(f.issuedStatement){
+  const selected=db.prepare("SELECT s.card_id FROM cc_statements s JOIN accounts a ON a.id=s.card_id AND a.owner_id=s.owner_id WHERE s.id=? AND s.owner_id=? AND s.superseded_by IS NULL AND a.type='credit_card'").get(Number(f.issuedStatement),owner) as {card_id:number}|undefined;
+  if(!selected||f.cards&&!f.cards.split(",").map(Number).includes(selected.card_id))throw Error("Statement unavailable for this account");
+  where.push("s.id=?");args.push(Number(f.issuedStatement));
+ }
  if(f.dueStart&&f.dueEnd&&f.dueStart>f.dueEnd)throw Error("Due date start must precede end");
  if(f.dueStart){where.push("s.due_date>=?");args.push(f.dueStart);}
  if(f.dueEnd){where.push("s.due_date<=?");args.push(f.dueEnd);}

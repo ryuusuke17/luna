@@ -6,6 +6,7 @@ import {join} from "node:path";
 import {randomUUID} from "node:crypto";
 import {fork,type ChildProcess} from "node:child_process";
 import {createJiti} from "jiti";
+import type {CreditDashboard} from "../../src/lib/credit-card-dashboard.ts";
 
 const directory=mkdtempSync(join(tmpdir(),"luna-issued-api-"));
 process.env.LUNA_DB_PATH=join(directory,"isolated.sqlite");
@@ -16,7 +17,7 @@ for(const [path,file] of [
  ["/api/auth/:action","auth/[action].ts"],["/api/accounts","accounts.ts"],["/api/accounts/:id","accounts/[id].get.ts"],
  ["/api/credit-card-statements","credit-card-statements.ts"],["/api/credit-card-statements/:id","credit-card-statements/[id].ts"],
  ["/api/credit-card-statements/:id/download","credit-card-statements/[id]/download.get.ts"],
- ["/api/credit-card-dashboard","credit-card-dashboard.get.ts"],["/api/transactions","transactions.ts"],
+ ["/api/credit-card-dashboard","credit-card-dashboard.get.ts"],["/api/transactions","transactions.ts"],["/api/search","search.get.ts"],
  ["/api/transactions/:id","transactions/[id].patch.ts"],["/api/export","export.get.ts"]]){
  app.all(path,(await load.import<any>(`../routes/api/${file}`)).default);
 }
@@ -59,12 +60,27 @@ test("real authenticated API handlers: recover history, approve once, correct tw
  assert.equal(current.source,'import');assert.equal(current.issued[0].original_transaction_id,original);assert.equal(current.issued[0].resolved_transaction_id,current.id);
  records=await json(`transactions?page=1&account=${card}&source=import&search=immutable-issued.csv`);assert.equal(records.total,1);
  assert.equal((await json(`transactions?page=1&account=${card}&source=manual`)).total,0);
+  const manualBank=await json('transactions',{kind:'expense',date:'2026-04-20',amount:1234,accountId:bank,merchant:'Manual bank fixture',idempotencyKey:randomUUID()});
+  const manualCard=await json('transactions',{kind:'expense',date:'2026-04-21',amount:2345,accountId:card,merchant:'Manual card fixture',idempotencyKey:randomUUID()});
+  assert.equal((await json(`transactions?account=${card}&source=manual&page=1`)).items.some((item:any)=>item.id===manualCard.id),true);
+  const importedBank=await json('transactions',{kind:'expense',date:'2026-04-22',amount:3456,accountId:bank,merchant:'Imported bank fixture',idempotencyKey:randomUUID()});
+  const batch=Number(db.prepare('INSERT INTO csv_import_batches(owner_id,account_id,file_hash,row_count) VALUES(?,?,?,1)').run(1,bank,randomUUID()).lastInsertRowid);
+  db.prepare('INSERT INTO csv_import_rows(owner_id,account_id,batch_id,row_key,source_id,transaction_id) VALUES(?,?,?,?,?,?)').run(1,bank,batch,'fixture-row','fixture-source',importedBank.id);
+  const main=await json('transactions?scope=manual-non-card&page=1');
+  assert.deepEqual(main.items.map((item:any)=>item.id),[manualBank.id]);assert.equal(main.total,1);
+  assert.equal((await json('transactions?scope=manual-non-card&month=2026-04&search=Manual%20bank&page=1')).total,1);
+  assert.equal((await json('transactions?scope=manual-non-card&source=import&page=1')).total,0);
+  const searchResults=await json('search?q=fixture');assert.ok(searchResults.some((item:any)=>item.type==='transaction'&&item.id===manualBank.id));assert.ok(!searchResults.some((item:any)=>item.type==='transaction'&&[manualCard.id,importedBank.id,current.id].includes(item.id)));
+  assert.ok((await json('search?q=Historical')).some((item:any)=>item.type==='account'&&item.id===card));
+  for(const term of ['Corrected','Imported'])assert.ok(!(await json(`search?q=${term}`)).some((item:any)=>item.type==='transaction'&&[current.id,importedBank.id].includes(item.id)));
+  assert.equal((await json(`credit-card-dashboard?issuedStatement=${sid}`)).activity.total,13);
  const exported=await json('export');assert.equal(exported.credit_card_line_decisions[0].transaction_id,original);assert.equal(exported.credit_card_line_decisions[0].resolved_transaction_id,current.id);assert.equal(exported.transactions.find((t:any)=>t.id===current.id).issued[0].line_id,line.id);
  await json(`credit-card-statements/${sid}`,{action:'payment',data:{cardId:card,currency:'PHP',date:'2026-04-15',amount:'10.00',sourceAccountId:bank,reference:'Receipt',notes:'',requestKey:randomUUID()}});
  const transfer=await json('transactions',{kind:'transfer',date:'2026-04-22',amount:1000,accountId:bank,counterAccountId:card,idempotencyKey:randomUUID()});
  detail=await json(`credit-card-statements/${sid}`);const p=detail.payments[0];assert.equal(p.candidates[0].id,transfer.id);
  const before=await json('accounts');await json(`credit-card-statements/${sid}`,{action:'link-payment',paymentId:p.id,transactionId:transfer.id,transactionVersion:p.candidates[0].version,version:p.version});
  assert.deepEqual(await json('accounts'),before);assert.equal((await json(`transactions?page=1&account=${bank}`)).items[0].id,transfer.id);
+  assert.deepEqual((await json('transactions?scope=manual-non-card&page=1')).items.map((item:any)=>item.id),[manualBank.id]);
  assert.deepEqual(Buffer.from(await (await request(`credit-card-statements/${sid}/download`)).arrayBuffer()),source);
  assert.deepEqual(db.pragma('foreign_key_check'),[]);
 });
@@ -110,6 +126,18 @@ test("exact issued-statement membership ignores posting month, deduplicates corr
  const duplicate=detail.lines.find((l:any)=>l.id!==line.id);
  db.prepare("INSERT INTO cc_line_decisions(line_id,transaction_id,action,classification,reason,actor_id,request_key,request_json,version) SELECT ?,transaction_id,'link',classification,'fixture',actor_id,?,'{}',version FROM cc_line_decisions WHERE line_id=?").run(duplicate.id,randomUUID(),line.id);
  const before=await json('export');
+ const sourceBefore=db.prepare('SELECT id,file_hash,source_bytes FROM cc_statements ORDER BY id').all();
+ const activity=await json('credit-card-dashboard?issuedStatement='+issue+'&cards='+card) as CreditDashboard;
+ assert.equal(activity.total,1);assert.equal(activity.items[0].id,issue);assert.equal(activity.activity.total,13);
+ assert.deepEqual(activity.activity.items.map(item=>item.id).sort((first,second)=>first-second),detail.lines.map((item:{id:number})=>item.id).sort((first:number,second:number)=>first-second));
+ assert.equal(activity.activity.items.find(item=>item.id===line.id).ledgerTransactionId,current.id);
+ assert.equal(activity.activity.items.find(item=>item.id===duplicate.id).ledgerTransactionId,current.id);
+ assert.equal(new Set(activity.activity.items.map(item=>item.id)).size,13);
+ assert.ok(activity.activity.items.some(item=>item.ledgerTransactionId===null&&item.amount<0));
+ assert.equal((await json('credit-card-dashboard?issuedStatement='+second)).activity.total,13);
+ for(const id of ['', '0','-1','1.5','bad','9007199254740992','999999999'])assert.equal((await request('credit-card-dashboard?issuedStatement='+id)).status,400);
+ for(const wrong of [other,bank])assert.equal((await request('credit-card-dashboard?issuedStatement='+issue+'&cards='+wrong)).status,400);
+ assert.equal((await request('credit-card-dashboard?issuedStatement='+issue,undefined,'GET',false)).status,401);
  const selected=await json('transactions?issuedStatement='+issue+'&dateMode=statement&account='+card+'&page=1');
  assert.equal(selected.total,1);assert.deepEqual(selected.items.map((t:any)=>t.id),[current.id]);assert.equal(selected.items[0].posted_date,'2026-07-25');
  assert.equal((await json('transactions?issuedStatement='+second+'&page=1')).total,0);
@@ -125,16 +153,21 @@ test("exact issued-statement membership ignores posting month, deduplicates corr
  assert.equal((await request('transactions?issuedStatement='+issue+'&account='+bank)).status,400);
  assert.equal((await request('transactions?issuedStatement='+issue,undefined,'GET',false)).status,401);
  const after=await json('export');delete before.exported_at;delete after.exported_at;assert.deepEqual(after,before);
+ assert.deepEqual(db.prepare('SELECT id,file_hash,source_bytes FROM cc_statements ORDER BY id').all(),sourceBefore);
  const owner=db.prepare("SELECT owner_id FROM cc_statements WHERE id=?").get(second).owner_id;
  const foreign=Number(db.prepare("INSERT INTO users(username,password_hash) VALUES(?,?)").run('foreign-'+randomUUID(),'unusable-test-hash').lastInsertRowid);
  db.prepare('UPDATE cc_statements SET owner_id=? WHERE id=?').run(foreign,second);
  assert.equal((await request('transactions?issuedStatement='+second)).status,404);
+ assert.equal((await request('credit-card-dashboard?issuedStatement='+second)).status,400);
  assert.equal((await json('credit-card-statements?cards='+other)).items.length,0);
  db.prepare('UPDATE cc_statements SET owner_id=? WHERE id=?').run(owner,second);
  db.prepare("UPDATE accounts SET type='bank' WHERE id=?").run(other);
  assert.equal((await request('transactions?issuedStatement='+second)).status,404);
+ assert.equal((await request('credit-card-dashboard?issuedStatement='+second)).status,400);
  db.prepare("UPDATE accounts SET type='credit_card' WHERE id=?").run(other);
  db.prepare("UPDATE transactions SET voided_at=CURRENT_TIMESTAMP WHERE id=?").run(current.id);
  assert.equal((await json('transactions?issuedStatement='+issue+'&page=1')).total,0);
+ const voided=await json('credit-card-dashboard?issuedStatement='+issue) as CreditDashboard;
+ assert.equal(voided.activity.total,13);assert.ok(voided.activity.items.every(item=>item.ledgerTransactionId===null));
  assert.deepEqual(db.pragma('foreign_key_check'),[]);
 });

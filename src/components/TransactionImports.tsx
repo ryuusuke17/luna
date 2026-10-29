@@ -24,8 +24,10 @@ export default function TransactionImports({batch,account,onSelectBatch,onLegacy
  const categories=useQuery({queryKey:["categories"],queryFn:()=>api<{id:number;name:string;kind:string}[]>("categories")});
  useEffect(()=>{if(batch)setHistoryOpen(true);setEditing(null);setLimit(25);setError("");setConfirmHistory(false);},[batch]);
  const uploads=(history.data??[]).filter(item=>!account||item.account_id===Number(account));
+ const earlierImports=(legacy.data??[]).filter(item=>!account||item.account_id===Number(account));
  const needsAttention=uploads.reduce((total,item)=>total+item.needs_review+(item.status==="failed"?1:0),0);
  const pending=detail.data?.entries.filter(entry=>!entry.action)??[];
+ if(!batch&&!history.isPending&&!legacy.isPending&&!history.error&&!legacy.error&&!uploads.length&&!earlierImports.length)return null;
  async function action(body:Record<string,unknown>,version?:string){
   if(!detail.data||busy)return;setBusy(true);setError("");
   try{
@@ -39,7 +41,7 @@ export default function TransactionImports({batch,account,onSelectBatch,onLegacy
    <summary className="cursor-pointer font-semibold py-1">Import history</summary>
    <div className="my-2 flex flex-wrap items-center gap-2">
     <Button size="sm" variant={attention?"default":"outline"} aria-pressed={attention} onClick={()=>{setAttention(value=>!value);if(!attention&&!pending.length){const next=uploads.find(item=>item.needs_review||item.status==="failed");if(next)onSelectBatch(next.id,next.account_id);}}}>Needs attention ({needsAttention})</Button>
-    {batch&&<span className="break-words text-xs text-muted-foreground">Showing this upload. Use Show all imports to clear this selection.</span>}
+    {batch&&<span className="break-words text-xs text-muted-foreground">Showing this upload for the selected account. Clear the upload filter to view its full import history.</span>}
    </div>
    {(history.error||legacy.error)&&<p role="alert" className="text-xs text-destructive">{(history.error??legacy.error)?.message}</p>}
    {attention&&uploads.length>0&&!uploads.some(item=>item.needs_review||item.status==="failed")&&<p role="status" className="my-2 text-xs text-muted-foreground">No imports need attention.</p>}
@@ -61,7 +63,7 @@ export default function TransactionImports({batch,account,onSelectBatch,onLegacy
      finally{setBusy(false);}
     }}>Force purge all statement imports</Button>
    </div>
-   {!attention&&legacy.data?.some(item=>!account||item.account_id===Number(account))&&<details className="mt-2 pt-2 border-t border-border"><summary className="cursor-pointer py-1 font-medium text-xs">Earlier CSV / JSON imports</summary><ul className="divide-y divide-border">{legacy.data.filter(item=>!account||item.account_id===Number(account)).map(item=><li key={`${item.format}-${item.id}`} className="flex flex-wrap items-center justify-between gap-2 py-1.5"><span className="text-xs">{item.account_name} - {item.format.toUpperCase()} #{item.id} - {item.rows} rows</span><Button variant="outline" size="sm" onClick={()=>onLegacy(item.format,item.id,item.account_id)}>View transactions</Button></li>)}</ul><p className="mt-1 text-xs text-muted-foreground">Earlier imports did not retain downloadable original files.</p></details>}
+   {!attention&&earlierImports.length>0&&<details className="mt-2 pt-2 border-t border-border"><summary className="cursor-pointer py-1 font-medium text-xs">Earlier CSV / JSON imports</summary><ul className="divide-y divide-border">{earlierImports.map(item=><li key={`${item.format}-${item.id}`} className="flex flex-wrap items-center justify-between gap-2 py-1.5"><span className="text-xs">{item.account_name} - {item.format.toUpperCase()} #{item.id} - {item.rows} rows</span><Button variant="outline" size="sm" onClick={()=>onLegacy(item.format,item.id,item.account_id)}>View transactions</Button></li>)}</ul><p className="mt-1 text-xs text-muted-foreground">Earlier imports did not retain downloadable original files.</p></details>}
   </details>
   {detail.isFetching&&<p role="status" className="mt-3">Loading upload...</p>}{detail.error&&<p role="alert" className="mt-3 text-destructive">{detail.error.message}</p>}
   {detail.data&&<section className="mt-5 min-w-0" aria-label="Import needs attention">

@@ -146,7 +146,7 @@ test("statement identity suppresses posted dates, clears uploads and resets sele
   assert.equal(next.get("issuedStatement"),"9");
   assert.equal(next.get("dateMode"),"statement");
   for(const key of ["month","start","end","period","batch","legacy","importId","page","id"])assert.equal(next.has(key),false);
-  assert.equal(next.get("account"),"4");assert.equal(next.get("search"),"shop");
+  assert.equal(next.get("account"),"4");assert.equal(next.has("search"),false);
   assert.equal(transactionDateFilter(next).mode,"statement");
   assert.equal(transactionDateLabel(next),"Statement #9");
   assert.equal(adjacentTransactionMonth(next,-1),null);
@@ -159,4 +159,36 @@ test("statement identity suppresses posted dates, clears uploads and resets sele
   const calendar=applyTransactionDate(next,{mode:"month",month:"2026-08",start:"",end:""});
   assert.equal(calendar.get("dateMode"),"calendar");assert.equal(calendar.has("issuedStatement"),false);
   for(const mode of ["range","all"] as const){const result=applyTransactionDate(next,{mode,month:"",start:"2026-07-01",end:""});assert.equal(result.has("issuedStatement"),false);assert.equal(result.has("dateMode"),false);}
+});
+
+test("statement activity filters survive issue navigation with separate line dates and reset across domains", () => {
+  const original=params("account=4&dateMode=statement&issuedStatement=2&lineSearch=shop&lineStart=2026-08-01&lineEnd=2026-09-07&lineType=credit&category=Clothing&linePage=3&page=2&id=42");
+  const next=applyTransactionDate(original,{mode:"statement",issuedStatement:"3",month:"",start:"",end:""});
+  for(const key of ["lineSearch","lineStart","lineEnd","lineType","category"])assert.equal(next.get(key),original.get(key));
+  for(const key of ["page","id","linePage","start","end"])assert.equal(next.has(key),false);
+  assert.equal(normalizeTransactionFilters(next).get("lineStart"),"2026-08-01");
+  const calendar=applyTransactionDate(next,{mode:"month",month:"2026-09",start:"",end:""});
+  for(const key of ["category","lineSearch","lineStart","lineEnd","lineType","linePage"])assert.equal(calendar.has(key),false);
+  const changed=new URLSearchParams(original);changed.set("account","5");
+  const account=applyTransactionFilters(original,changed);
+  for(const key of ["issuedStatement","category","lineStart","lineEnd","lineSearch"])assert.equal(account.has(key),false);
+  const entered=applyTransactionDate(params("account=4&kind=expense&category=7&source=manual&sort=oldest&search=ledger"),{mode:"statement",issuedStatement:"2",month:"",start:"",end:""});
+  for(const key of ["kind","category","source","sort","search"])assert.equal(entered.has(key),false);
+  assert.equal(original.get("linePage"),"3");
+});
+
+test("statement month selects every issue in its month and stays separate from posted dates", () => {
+  const original=params("account=4&dateMode=calendar&month=2026-10&start=2026-10-01&end=2026-10-31&search=ledger&kind=expense&source=manual&sort=oldest&page=3&id=42&lineSearch=coffee&linePage=2");
+  const selected=applyTransactionDate(original,{mode:"statement-month",month:"2026-08",start:"",end:""});
+  assert.equal(selected.get("dateMode"),"statement-month");
+  assert.equal(selected.get("month"),"2026-08");
+  assert.equal(selected.get("account"),"4");
+  assert.equal(selected.get("lineSearch"),"coffee");
+  for(const key of ["issuedStatement","start","end","search","kind","source","sort","page","id","linePage"])assert.equal(selected.has(key),false);
+  assert.equal(transactionDateFilter(selected).mode,"statement-month");
+  assert.equal(transactionDateLabel(selected),"Statements · August 2026");
+  assert.equal(adjacentTransactionMonth(selected,-1),"2026-07");
+  assert.equal(adjacentTransactionMonth(selected,1),"2026-09");
+  assert.equal(normalizeTransactionFilters(params("dateMode=statement-month"),new Date(2026,9,15)).get("month"),"2026-10");
+  assert.throws(()=>applyTransactionDate(selected,{mode:"statement-month",month:"2026-13",start:"",end:""}));
 });

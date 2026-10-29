@@ -435,77 +435,67 @@ async function issuedWorkspace(page: Page) {
     {id:91,card_id:2,card_name:"Everyday card",statement_date:"2026-08-25",currency:"USD",filename:"August separate USD.csv"},
     {id:90,card_id:2,card_name:"Everyday card",statement_date:"2026-08-15",currency:"PHP",filename:"August issue with a very long source filename ".repeat(3)+".csv"},
     {id:89,card_id:2,card_name:"Everyday card",statement_date:"2026-06-15",currency:"PHP",filename:"June older.csv"},
-  ];
-  const statementRequests:URLSearchParams[]=[];
-  let legacyCount=1,fail=false;
+  ].map(issue=>({...issue,last4:"4321",due_date:"2026-09-15",original_balance:1000,minimum_due:100,applied:0,remaining:1000,status:"not_tracked",metadata:{issuer:"Fixture bank"}}));
+  const statementRequests:URLSearchParams[]=[],activityRequests:URLSearchParams[]=[],transactionRequests:URLSearchParams[]=[];
+  let fail=false,activityFail=false,heldIssue="",release:(()=>void)|undefined;
+  const lines=issues.flatMap(issue=>Array.from({length:issue.id===90?20:issue.id===89?26:1},(_,index)=>({id:issue.id*100+index,statement_id:issue.id,row_index:index+1,card_id:2,card_name:issue.card_name,issuer:"Fixture bank",last4:"4321",currency:issue.currency,statement_month:issue.statement_date.slice(0,7),amount:index===19||issue.id===91?-300000:1000,display_type:index===19||issue.id===91?"payment":index===1?"installment":"charge",display_category:"Shopping",ledgerTransactionId:issue.id===90&&index===0?200:null,source:{saleDate:issue.id===90?"2026-07-25":issue.statement_date,postDate:issue.id===90?index===0?"2026-07-25":"2026-08-07":issue.statement_date,merchantRaw:issue.id===90?index===0?"Linked July purchase":`Unlinked source purchase ${index}`:issue.id===91?"Unlinked USD credit":`Older source ${index}`,transactionNotesRaw:"Immutable source line",typeRaw:"charge"}})));
+  const cards=[{id:2,name:"Everyday card",issuer:"Fixture bank",last4:"4321",credit_limit:100000}];
   await page.route(/\/api\/credit-card-statements(?:\?|$)/,async route=>{
     const q=new URL(route.request().url()).searchParams;statementRequests.push(q);
     if(fail){await route.fulfill({status:503,json:{message:"Statements temporarily unavailable"}});return;}
-    const selected=q.get("month")==="2026-08"?issues.slice(1,1+legacyCount):[];
+    const selected=issues.filter(issue=>q.has("month")?issue.statement_date.startsWith(q.get("month")!):false);
     const scoped=q.get("cards")&&q.get("cards")!=="2"?[]:issues;
     const number=Number(q.get("page")||1);
-    await route.fulfill({json:{items:q.has("month")?selected:scoped.slice((number-1)*2,number*2),page:number,pageSize:2,total:q.has("month")?selected.length:scoped.length,metrics:[],cards:[{id:2,selectedIssues:selected}],allCards:[],issuers:[]}});
+    await route.fulfill({json:{items:q.has("month")?selected:scoped.slice((number-1)*2,number*2),page:number,pageSize:2,total:q.has("month")?selected.length:scoped.length,metrics:[],cards:[{id:2,selectedIssues:selected}],allCards:cards,issuers:["Fixture bank"]}});
   });
   await page.route(/\/api\/transactions(?:\?|$)/,async(route)=>{
     const q=new URL(route.request().url()).searchParams;
+    transactionRequests.push(new URLSearchParams(q));
     if(!q.has("issuedStatement")){await route.fallback();return;}
     state.requests.push(new URLSearchParams(q));
     const items=q.get("issuedStatement")==="90"?[{id:200,posted_date:"2026-07-25",merchant:"Linked July purchase",description:"Corrected linked row",kind:"expense",account_id:2,account_name:"Everyday card",amount:1000,source:"import",balance_impacts:[],version:"1"}]:[];
     await route.fulfill({json:{items,total:items.length,pageSize:20}});
   });
-  return {...state,issues,statementRequests,setLegacyCount:(count:number)=>{legacyCount=count;},failNext:()=>{fail=true;},recover:()=>{fail=false;}};
+  await page.route(/\/api\/credit-card-dashboard(?:\?|$)/,async route=>{
+    const q=new URL(route.request().url()).searchParams;activityRequests.push(new URLSearchParams(q));
+    if(activityFail){await route.fulfill({status:503,json:{message:"Statement lines temporarily unavailable"}});return;}
+    if(heldIssue&&q.get("issuedStatement")===heldIssue)await new Promise<void>(resolve=>{release=resolve;});
+    if(q.has("issuedStatement")&&(!issues.some(issue=>String(issue.id)===q.get("issuedStatement"))||q.has("cards")&&q.get("cards")!=="2")){await route.fulfill({status:400,json:{message:"Statement unavailable for this account"}});return;}
+    const selected=issues.filter(issue=>(!q.get("issuedStatement")||String(issue.id)===q.get("issuedStatement"))&&(!q.get("month")||issue.statement_date.startsWith(q.get("month")!))&&(!q.get("cards")||q.get("cards")==="2"));
+    const filtered=lines.filter(line=>selected.some(issue=>issue.id===line.statement_id)&&(!q.get("lineSearch")||line.source.merchantRaw.toLowerCase().includes(q.get("lineSearch")!.toLowerCase()))&&(!q.get("lineType")||(q.get("lineType")==="credit"?line.amount<0:line.display_type===q.get("lineType")))&&(!q.get("start")||line.source.postDate>=q.get("start")!)&&(!q.get("end")||line.source.postDate<=q.get("end")!));
+    const linePage=Number(q.get("linePage")||1),number=Number(q.get("page")||1);
+    await route.fulfill({json:{items:selected.slice((number-1)*25,number*25),total:selected.length,page:number,pageSize:25,metrics:[],cards:[],allCards:cards,issuers:["Fixture bank"],availableMonths:["2026-08","2026-06"],activity:{items:filtered.slice((linePage-1)*25,linePage*25),total:filtered.length,page:linePage,pageSize:25,categories:["Shopping"]}}});
+  });
+  await page.route(/\/api\/credit-card-statements\/\d+(?:\?|$)/,route=>route.fulfill({status:503,json:{message:"Read-only detail fixture unavailable"}}));
+  return {...state,issues,lines,statementRequests,activityRequests,transactionRequests,failNext:()=>{fail=true;},recover:()=>{fail=false;activityFail=false;},failActivity:()=>{activityFail=true;},holdIssue:(id:string)=>{heldIssue=id;},releaseIssue:()=>{heldIssue="";release?.();}};
 }
 
-test("exact statement picker scopes choices, paginates, navigates issues and preserves history without date bounds",async({page})=>{
+test("main Transactions excludes statement activity and keeps its query scoped to manual non-card entries",async({page})=>{
   const state=await issuedWorkspace(page);
-  await page.goto("/transactions?account=2&batch=6&month=2026-08&page=3");
-  await dateButton(page).focus();await page.keyboard.press("Enter");
-  const chooser=page.getByRole("dialog",{name:"Date filter",exact:true});
-  await chooser.getByRole("combobox",{name:"Date mode",exact:true}).selectOption("statement");
-  await expect(chooser.getByRole("button",{name:"Apply",exact:true})).toBeDisabled();
-  const select=chooser.getByRole("combobox",{name:"Statement",exact:true});
-  await expect(select.getByRole("option")).toHaveCount(3);
-  await expect(select.getByRole("option",{name:/Everyday card · 2026-08-15 · PHP/})).toBeAttached();
-  await select.selectOption("90");
-  await chooser.getByRole("button",{name:"Apply",exact:true}).focus();await page.keyboard.press("Enter");
-  await expect(dateButton(page)).toBeFocused();
-  await expect(page).toHaveURL(/issuedStatement=90/);
-  for(const key of ["month","start","end","batch","page","id"])expect(new URL(page.url()).searchParams.has(key)).toBe(false);
-  await expect(page.getByRole("row").filter({hasText:"Linked July purchase"})).toBeVisible();
-  expect(state.requests.filter(q=>q.has("issuedStatement")).every(q=>!q.has("month")&&!q.has("start")&&!q.has("end"))).toBe(true);
-  await page.reload();await expect(dateButton(page)).toContainText("2026-08-15");
-  const previous=page.getByRole("button",{name:"Previous statement",exact:true}),next=page.getByRole("button",{name:"Next statement",exact:true});
-  await next.click();await expect(page).toHaveURL(/issuedStatement=91/);await expect(next).toBeDisabled();
-  await expect(page.getByText("No linked transactions for this statement.",{exact:false})).toBeVisible();
-  await expect(page.getByRole("link",{name:"Review source statement"})).toHaveAttribute("href","/statements?document=91");
-  await page.goBack();await expect(page).toHaveURL(/issuedStatement=90/);
-  await page.goForward();await expect(page).toHaveURL(/issuedStatement=91/);
-  await previous.click();await expect(page).toHaveURL(/issuedStatement=90/);
-  await previous.click();await expect(page).toHaveURL(/issuedStatement=89/);await expect(previous).toBeDisabled();
-  expect(state.statementRequests.some(q=>q.get("page")==="2")).toBe(true);
-  expect(state.statementRequests.every(q=>q.get("cards")==="2")).toBe(true);
-  await filterButton(page).click();await page.getByRole("combobox",{name:"Account",exact:true}).selectOption("1");
-  await page.getByRole("dialog",{name:"Filter transactions"}).getByRole("button",{name:"Apply",exact:true}).click();
-  expect(new URL(page.url()).searchParams.has("issuedStatement")).toBe(false);
+  const activity=page.getByRole("region",{name:"Unified statement transactions",exact:true});
+  await page.goto("/transactions?account=2&dateMode=statement&issuedStatement=90&lineSearch=linked");
+  await expect(activity).toHaveCount(0);
+  await expect(page.getByRole("option",{name:"Per statement",exact:true})).toHaveCount(0);
+  await expect(page.getByRole("option",{name:"Statement month",exact:true})).toHaveCount(0);
+  await expect(page).not.toHaveURL(/issuedStatement|lineSearch/);
+  await expect(page.getByRole("button",{name:/Date filter:/})).toBeVisible();
+  expect(state.activityRequests).toHaveLength(0);
+  expect(state.statementRequests).toHaveLength(0);
+  expect(state.transactionRequests.length).toBeGreaterThan(0);
+  expect(state.transactionRequests.every(query=>query.get("scope")==="manual-non-card"&&!query.has("issuedStatement"))).toBe(true);
   expect(state.workspace.requests.every(request=>request.method==="GET")).toBe(true);
 });
 
-test("legacy card issue month resolves unique match; ambiguous and missing issues never fetch calendar activity",async({page})=>{
+test("card account bare months now use statement-month activity by default",async({page})=>{
   const state=await issuedWorkspace(page);
   await page.goto("/accounts/2?account=2&month=2026-08&search=linked&sort=oldest");
-  await expect(page).toHaveURL(/issuedStatement=90/);
-  expect(new URL(page.url()).searchParams.get("search")).toBe("linked");
-  expect(new URL(page.url()).searchParams.get("sort")).toBe("oldest");
-  expect(state.requests.every(q=>q.has("issuedStatement"))).toBe(true);
-  state.setLegacyCount(2);state.requests.length=0;
-  await page.goto("/accounts/2?account=2&month=2026-08");
-  await expect(page.getByText("Multiple statements issued in this month. Choose a statement explicitly.")).toBeVisible();
-  expect(state.requests).toHaveLength(0);
-  await dateButton(page).click();await page.getByRole("combobox",{name:"Statement",exact:true}).selectOption("91");
-  await page.getByRole("dialog",{name:"Date filter",exact:true}).getByRole("button",{name:"Apply",exact:true}).click();
-  await expect(page).toHaveURL(/issuedStatement=91/);
+  await expect(page).toHaveURL(/dateMode=statement-month/);
+  expect(new URL(page.url()).searchParams.has("search")).toBe(false);
+  expect(new URL(page.url()).searchParams.has("sort")).toBe(false);
+  expect(state.requests).toHaveLength(0);expect(state.activityRequests.some(q=>q.get("month")==="2026-08"&&q.get("cards")==="2"&&!q.has("issuedStatement"))).toBe(true);
+  await expect(page.getByRole("region",{name:"Unified statement transactions",exact:true}).locator("tbody tr")).toHaveCount(21);
   await page.goto("/accounts/2?account=2&month=2026-09");
-  await expect(page.getByText("No statement issued in this month for this account. Choose another statement or Calendar month.")).toBeVisible();
+  await expect(page.getByText("No statement issued in September 2026 for this card. Choose another statement month or Calendar month.")).toBeVisible();
   await dateButton(page).click();await page.getByRole("combobox",{name:"Date mode",exact:true}).selectOption("month");
   await page.getByLabel("Month",{exact:true}).fill("2026-09");
   await page.getByRole("dialog",{name:"Date filter",exact:true}).getByRole("button",{name:"Apply",exact:true}).click();
@@ -513,30 +503,183 @@ test("legacy card issue month resolves unique match; ambiguous and missing issue
   expect(state.requests.some(q=>q.get("month")==="2026-09"&&q.get("dateMode")==="calendar")).toBe(true);
 });
 
-test("statement picker exposes loading, retry, empty scope and keyboard focus; long labels fit touch layouts",async({page})=>{
-  const state=await issuedWorkspace(page);state.failNext();
-  await page.goto("/transactions?account=2&period=all");
-  await dateButton(page).click();const chooser=page.getByRole("dialog",{name:"Date filter",exact:true});
-  await page.getByRole("combobox",{name:"Date mode",exact:true}).selectOption("statement");
-  await expect(chooser.getByRole("button",{name:"Retry statements"})).toBeVisible({timeout:15000});
-  await expect(chooser.getByRole("button",{name:"Apply",exact:true})).toBeDisabled();
-  state.recover();await chooser.getByRole("button",{name:"Retry statements"}).click();
-  await page.getByRole("combobox",{name:"Statement",exact:true}).selectOption("90");
-  await chooser.getByRole("button",{name:"Load older statements"}).click();
-  await expect(page.getByRole("combobox",{name:"Statement",exact:true}).getByRole("option",{name:/June older/})).toBeAttached();
-  await page.keyboard.press("Escape");await expect(dateButton(page)).toBeFocused();
-  for(const width of [1440,390,320]){
+test("statement month shows every card statement issued in that month and distinguishes empty months",async({page})=>{
+  const state=await issuedWorkspace(page);
+  await page.goto("/accounts/2?account=2");
+  await expect(dateButton(page)).toHaveText("October 2026");
+  await dateButton(page).click();
+  const chooser=page.getByRole("dialog",{name:"Date filter",exact:true});
+  await expect(chooser.getByRole("combobox",{name:"Date mode",exact:true}).getByRole("option",{name:"Per statement",exact:true})).toHaveCount(0);
+  await expect(chooser.getByRole("combobox",{name:"Date mode",exact:true})).toHaveValue("statement-month");
+  await page.locator('input[type="month"]').fill("2026-08");
+  await chooser.getByRole("button",{name:"Apply",exact:true}).click();
+  await expect(page).toHaveURL(/dateMode=statement-month/);
+  await expect(page).toHaveURL(/month=2026-08/);
+  const activity=page.getByRole("region",{name:"Unified statement transactions",exact:true});
+  await expect(activity.locator("tbody tr")).toHaveCount(21);
+  const issuedMonth=[...state.activityRequests].reverse().find(query=>query.get("month")==="2026-08");
+  expect(issuedMonth?.get("cards")).toBe("2");
+  expect(issuedMonth?.has("issuedStatement")).toBe(false);
+  expect(state.transactionRequests.some(query=>query.get("month")==="2026-08"&&query.get("account")==="2")).toBe(false);
+
+  await page.goto("/accounts/2?account=2&month=2026-10&dateMode=statement-month");
+  await expect(page.getByText("No statement issued in October 2026 for this card. Choose another statement month or Calendar month.")).toBeVisible();
+});
+
+test("card account filters stay compact and fit touch layouts",async({page})=>{
+  const state=await issuedWorkspace(page);
+  await page.goto("/accounts/2?account=2");
+  await expect(dateButton(page)).toHaveText("October 2026");
+  await expect(page.getByLabel("Merchant / notes",{exact:true})).toBeVisible();
+  await expect(page.getByText("Filters",{exact:true})).toBeVisible();
+  await expect(page.getByRole("searchbox",{name:"Merchant / notes"})).toHaveAttribute("placeholder","Merchant / notes");
+  const toolbar=page.getByLabel("Transaction filters");
+  expect(await toolbar.evaluate(element=>element.getBoundingClientRect().width)).toBeGreaterThan(600);
+  expect(await toolbar.evaluate(element=>[getComputedStyle(element).paddingLeft,getComputedStyle(element).paddingRight])).toEqual(["16px","16px"]);
+  await expect(page.getByLabel("Exact signed amount",{exact:true})).toHaveCount(0);
+  await page.getByText("Filters",{exact:true}).click();
+  await expect(page.getByLabel("Exact signed amount",{exact:true})).toHaveCount(0);
+  await expect(page.getByLabel("Amount currency",{exact:true})).toHaveCount(0);
+  await expect(page.getByRole("combobox",{name:"Line type",exact:true})).toBeVisible();
+  await expect(page.getByRole("button",{name:"Apply",exact:true})).toBeVisible();
+  await expect(page.getByRole("button",{name:"Reset",exact:true})).toBeVisible();
+  await page.getByRole("heading",{name:"Transactions",exact:true}).click();
+  await expect(page.getByRole("combobox",{name:"Line type",exact:true})).toHaveCount(0);
+  await page.getByText("Filters",{exact:true}).click();
+  await page.getByRole("combobox",{name:"Line type",exact:true}).selectOption("charge");
+  expect(new URL(page.url()).searchParams.has("lineType")).toBe(false);
+  await page.getByRole("button",{name:"Apply",exact:true}).click();
+  await expect(page).toHaveURL(/lineType=charge/);
+  await page.getByText(/Filters · 1/).click();
+  await page.getByRole("combobox",{name:"Line type",exact:true}).selectOption("payment");
+  await page.getByRole("button",{name:"Reset",exact:true}).click();
+  await expect(page).not.toHaveURL(/lineType/);
+  await page.goto("/accounts/2?account=2&dateMode=statement-month&month=2026-08&lineCurrency=194");
+  await expect(page).not.toHaveURL(/lineCurrency/);
+  await expect(page.getByRole("region",{name:"Unified statement transactions",exact:true}).locator("tbody tr")).toHaveCount(21);
+  expect(state.activityRequests.every(query=>!query.has("lineCurrency"))).toBe(true);
+  await page.keyboard.press("Escape");
+  const bottoms=await Promise.all([
+    dateButton(page).evaluate(element=>element.getBoundingClientRect().bottom),
+    page.getByRole("searchbox",{name:"Merchant / notes"}).evaluate(element=>element.getBoundingClientRect().bottom),
+    page.locator("summary").filter({hasText:/Filters/}).evaluate(element=>element.getBoundingClientRect().bottom),
+  ]);
+  expect(Math.max(...bottoms)-Math.min(...bottoms)).toBeLessThanOrEqual(4);
+  for(const width of [1440,820,390,320]){
     await page.setViewportSize({width,height:900});await dateButton(page).focus();await page.keyboard.press("Enter");
-    await page.getByRole("combobox",{name:"Date mode",exact:true}).selectOption("statement");
-    const select=page.getByRole("combobox",{name:"Statement",exact:true});await select.focus();await page.keyboard.press("Home");await page.keyboard.press("ArrowDown");await page.keyboard.press("ArrowDown");
-    await select.selectOption("90");
-    expect(await select.evaluate(el=>{const style=getComputedStyle(el);return style.outlineStyle!=="none"||style.boxShadow!=="none";})).toBe(true);
+    await expect(page.getByRole("dialog",{name:"Date filter",exact:true})).toBeVisible();
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-    await chooser.getByRole("button",{name:"Apply",exact:true}).focus();await page.keyboard.press("Enter");
-    await expect(dateButton(page)).toBeFocused();await expect(dateButton(page)).toContainText("2026-08-15");
-    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    await page.keyboard.press("Escape");await expect(dateButton(page)).toBeFocused();
   }
-  await page.goto("/transactions?account=1&dateMode=statement");await dateButton(page).click();
-  await expect(chooser.getByText("No statements available for this account.")).toBeVisible();
-  await expect(chooser.getByRole("button",{name:"Apply",exact:true})).toBeDisabled();
+});
+
+test("statement source membership stays within Accounts and Statements with independent line dates",async({page})=>{
+  const state=await issuedWorkspace(page);
+  const activity=page.getByRole("region",{name:"Unified statement transactions",exact:true});
+  let expected:string[]=[];
+  for(const path of ["/accounts/2?account=2&dateMode=statement&issuedStatement=90","/statements?issuedStatement=90"]){
+    await page.goto(path);await expect(activity.locator("tbody tr")).toHaveCount(20);
+    if(path.startsWith("/accounts/")){
+      expect(await activity.locator("thead th").allTextContents()).toEqual(["Sale date","Post date","Merchant / description","Signed amount","Type","Category","Notes"]);
+      await expect(activity.getByRole("button",{name:/View source/})).toHaveCount(0);
+      await expect(activity.getByText("Statement transactions",{exact:true})).toHaveCount(0);
+      await expect(activity.getByText("Statement row",{exact:false})).toHaveCount(0);
+      await expect(activity.getByRole("columnheader",{name:"Type"})).toHaveClass(/w-24/);
+      await expect(page.getByLabel("Merchant / notes",{exact:true})).toBeVisible();
+    }else{
+      expect(await activity.locator("thead th").allTextContents()).toEqual(["Sale date","Post date","Merchant / description","Issuer","Card","Statement month","Signed amount","Type","Category","Funding / payment source","Notes / source"]);
+      await expect(activity.getByRole("button",{name:/View source/})).toHaveCount(20);
+      await expect(page.getByText("Statement transactions",{exact:true})).toBeVisible();
+    }
+    const merchants=await activity.locator("tbody tr td:nth-child(3)").allTextContents();
+    if(expected.length)expect(merchants).toEqual(expected);else expected=merchants;
+    await expect(activity.getByRole("link",{name:path.startsWith("/accounts/")?"Ledger #200":"Linked ledger #200"})).toHaveAttribute("href",path.startsWith("/accounts/")?"/accounts/2?account=2&period=all&id=200":"/accounts/2?account=2&dateMode=statement&issuedStatement=90");
+    await expect(page.getByRole("button",{name:/Edit transaction|Delete transaction/})).toHaveCount(0);
+  }
+  await page.goto("/accounts/2?account=2&dateMode=statement&issuedStatement=90");
+  await page.getByText("Filters",{exact:true}).click();
+  await page.getByLabel("Post date from",{exact:true}).fill("2026-08-01");
+  await expect(activity.locator("tbody tr")).toHaveCount(20);
+  expect(new URL(page.url()).searchParams.has("lineStart")).toBe(false);
+  await page.getByRole("button",{name:"Apply",exact:true}).click();
+  await expect(activity.locator("tbody tr")).toHaveCount(19);
+  expect(new URL(page.url()).searchParams.get("lineStart")).toBe("2026-08-01");
+  expect(new URL(page.url()).searchParams.has("start")).toBe(false);
+  expect(state.activityRequests.some(query=>query.get("start")==="2026-08-01"&&!query.has("month"))).toBe(true);
+  await page.reload();await expect(activity.locator("tbody tr")).toHaveCount(19);
+  await page.goto("/accounts/2?account=2&dateMode=statement&issuedStatement=89&lineSort=merchant");
+  await expect(activity.locator("tbody tr")).toHaveCount(25);
+  await page.getByRole("button",{name:"Next activity",exact:true}).click();
+  await expect(activity.locator("tbody tr")).toHaveCount(1);
+  await page.getByRole("button",{name:"Next statement",exact:true}).click();
+  await expect(activity.locator("tbody tr")).toHaveCount(20);
+  const query=new URL(page.url()).searchParams;expect(query.has("linePage")).toBe(false);expect(query.get("lineSort")).toBe("merchant");
+  await page.getByLabel("Merchant / notes",{exact:true}).fill("missing source");
+  await expect(page.getByText("No lines match these activity filters.",{exact:false})).toBeVisible();
+  await page.goBack();await expect(activity.locator("tbody tr")).toHaveCount(20);
+  const search=page.getByLabel("Merchant / notes",{exact:true});await search.focus();await search.pressSequentially("Unlinked");
+  await expect(search).toBeFocused();await expect(search).toHaveValue("Unlinked");await expect(activity.locator("tbody tr")).toHaveCount(19);
+  expect(state.requests.some(query=>query.has("issuedStatement"))).toBe(false);
+  expect(state.workspace.requests.every(request=>request.method==="GET")).toBe(true);
+});
+
+test("per-statement switching never displays stale rows and unavailable or failed requests remain explicit",async({page})=>{
+  const state=await issuedWorkspace(page),activity=page.getByRole("region",{name:"Unified statement transactions",exact:true});
+  await page.goto("/accounts/2?account=2&dateMode=statement&issuedStatement=90");
+  await expect(activity.locator("tbody tr")).toHaveCount(20);
+  state.holdIssue("91");await page.getByRole("button",{name:"Next statement",exact:true}).click();
+  await expect(page.getByText("Loading statement lines…",{exact:true})).toBeVisible();
+  await expect(activity).toHaveCount(0);state.releaseIssue();
+  await expect(activity.locator("tbody tr")).toHaveCount(1);
+  for(const path of ["/accounts/1?account=1&dateMode=statement&issuedStatement=90","/statements?issuedStatement=99999"]){
+    await page.goto(path);await expect(page.getByRole("alert").filter({hasText:"Statement unavailable for this account"})).toBeVisible({timeout:15000});
+    await expect(activity).toHaveCount(0);
+  }
+  state.failActivity();await page.goto("/accounts/2?account=2&dateMode=statement&issuedStatement=90");
+  const retry=page.getByRole("button",{name:"Retry statement lines",exact:true});
+  await expect(retry).toBeVisible({timeout:15000});await expect(activity).toHaveCount(0);
+  expect(state.workspace.requests.every(request=>request.method==="GET")).toBe(true);
+});
+
+test("Statements activity selector retains line filters and keeps details independent",async({page})=>{
+  const state=await issuedWorkspace(page);
+  await page.goto("/statements?month=2026-08&activityMonth=2026-08&activityCard=2&lineType=credit&page=2&linePage=2");
+  const select=page.getByRole("combobox",{name:"Statement",exact:true}),activity=page.getByRole("region",{name:"Unified statement transactions",exact:true});
+  await expect(select).toHaveValue("");await expect(select.getByRole("option",{name:/2026-08-15 · #90/})).toBeAttached();
+  await select.selectOption("90");
+  await expect(select).toHaveValue("90");
+  const query=new URL(page.url()).searchParams;for(const key of ["activityMonth","activityCard","linePage"])expect(query.has(key)).toBe(false);expect(query.get("lineType")).toBe("credit");expect(query.get("month")).toBe("2026-08");expect(query.get("page")).toBe("2");
+  await expect(activity.locator("tbody tr")).toHaveCount(1);
+  await expect(page.getByRole("button",{name:"View statement #91",exact:true})).toHaveCount(0);
+  await page.goto("/statements?activityStatement=90&lineType=credit&document=90");
+  await expect(page.getByRole("region",{name:"Credit card statement detail",exact:true})).toBeVisible();await expect(activity.locator("tbody tr")).toHaveCount(1);
+  await page.getByRole("button",{name:"Close statement",exact:true}).click();await expect(select).toHaveValue("90");
+  await page.reload();await expect(select).toHaveValue("90");await expect(activity.locator("tbody tr")).toHaveCount(1);
+  await page.getByRole("combobox",{name:"Issue month",exact:true}).selectOption("2026-06");
+  await expect(select).toHaveValue("");expect(new URL(page.url()).searchParams.has("activityStatement")).toBe(false);
+  await page.goBack();await expect(select).toHaveValue("90");await page.goForward();await expect(select).toHaveValue("");
+  await page.goto("/statements?activityStatement=89");await expect(select).toHaveValue("89");
+  await expect(select.getByRole("option",{name:/2026-06-15 · #89/})).toBeAttached();
+  expect(state.statementRequests.some(query=>query.get("page")==="2")).toBe(true);
+  await expect(activity.locator("tbody tr")).toHaveCount(25);
+  await select.selectOption("");await expect(page.getByRole("navigation",{name:"Activity pagination"})).toContainText("47 lines");
+  state.holdIssue("91");await select.focus();await select.selectOption("91");
+  await expect(page.getByText("Loading statement transactions…",{exact:true})).toBeVisible();await expect(activity).toHaveCount(0);state.releaseIssue();
+  await expect(activity.locator("tbody tr")).toHaveCount(1);await expect(select).toBeFocused();
+  const search=page.getByLabel("Merchant / notes",{exact:true});await search.focus();await search.pressSequentially("Unlinked");
+  await expect(search).toBeFocused();await expect(search).toHaveValue("Unlinked");await expect(activity.locator("tbody tr")).toHaveCount(1);
+  expect(state.workspace.requests.every(request=>request.method==="GET")).toBe(true);
+});
+
+test("per-statement responsive desktop tablet mobile screenshots preserve keyboard focus and contained scrolling",async({page},testInfo)=>{
+  await issuedWorkspace(page);
+  for(const [name,width] of [["desktop",1440],["tablet",820],["mobile",390]] as const){
+    await page.setViewportSize({width,height:900});
+    for(const [surface,path] of [["accounts","/accounts/2?account=2&dateMode=statement&issuedStatement=90"],["statements","/statements?issuedStatement=90"]]){
+      await page.goto(path);const region=page.getByRole("region",{name:"Unified statement transactions",exact:true});
+      await expect(region.locator("tbody tr")).toHaveCount(20);await region.focus();await expect(region).toBeFocused();
+      expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+      await page.screenshot({path:testInfo.outputPath(`${surface}-${name}.png`),fullPage:true});
+    }
+  }
 });

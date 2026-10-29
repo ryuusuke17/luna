@@ -4,7 +4,7 @@ import { Dialog, DialogDescription, DialogHeader, DialogTitle } from "@/componen
 import WorkspaceDialogContent from "@/components/WorkspaceDialogContent";
 import { Button } from "@/components/WorkspaceButton";
 import { api } from "@/lib/api";
-import { accountLabels, editableAccountRecord, type Account, type AccountType } from "@/lib/accounts";
+import { accountLabels, defaultAccountName, editableAccountRecord, type Account, type AccountType } from "@/lib/accounts";
 import { cardNetworks, cardProducts, ewalletProviders, type CardType } from "@/lib/card-directory";
 
 const directoryType: Partial<Record<AccountType, CardType>> = { credit_card: "credit", bank: "debit" };
@@ -18,12 +18,14 @@ export default function AccountDialog({ account, onClose }: { account?: Account;
   const [issuer, setIssuer] = useState(initialIssuer && !issuers.includes(initialIssuer) ? "Other" : initialIssuer);
   const [customIssuer, setCustomIssuer] = useState(initialIssuer), [product, setProduct] = useState(account?.product ?? ""), [network, setNetwork] = useState(account?.network ?? "");
   const products = directory.filter(p => p.issuer === issuer), isCard = type === "credit_card" || type === "bank";
+  const generatedName = account ? defaultAccountName(type, account.issuer, account.product) : "";
+  const productLabel = (value: string) => issuer === "BDO" ? value.replace(/^BDO\s+/, "") : value;
   function changeType(value: AccountType) { setType(value); setIssuer(""); setCustomIssuer(""); setProduct(""); setNetwork(""); }
   async function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (pending.current) return;
     const form = new FormData(event.currentTarget), provider = issuer === "Other" ? customIssuer.trim() : issuer;
     pending.current = true; setBusy(true); setError("");
-    const name = String(form.get("name") ?? "").trim() || ([provider, isCard ? product : ""].filter(Boolean).join(" ") || accountLabels[type]).slice(0, 80);
+    const name = String(form.get("name") ?? "").trim() || defaultAccountName(type, provider, product);
     const body = { name, issuer: provider || null, product: isCard ? product || null : account?.product ?? null, network: isCard ? network || null : account?.network ?? null, last4: isCard ? form.get("last4") || null : account?.last4 ?? null, creditLimit: form.get("creditLimit") || undefined, liquid: form.get("liquid") === "on" };
     try {
       await api(account ? `accounts/${account.id}` : "accounts", { method: account ? "PATCH" : "POST", body: JSON.stringify(account ? { ...body, expected: JSON.stringify(editableAccountRecord(account)) } : { ...body, issuer: provider || undefined, product: product || undefined, network: network || undefined, type, openingDate: new Date().toISOString().slice(0, 10), openingBalance: "0" }) });
@@ -39,12 +41,12 @@ export default function AccountDialog({ account, onClose }: { account?: Account;
         {(isCard || type === "wallet") && <>
           <label className="min-w-0">{type === "wallet" ? "Wallet provider" : "Issuer / bank"}<select className="field" value={issuer} onChange={e => { setIssuer(e.target.value); setProduct(""); setNetwork(""); }}><option value="">Select provider</option>{issuers.map(i => <option key={i}>{i}</option>)}<option value="Other">Other provider</option></select></label>
           {issuer === "Other" && <label className="min-w-0">Provider name<input className="field" required maxLength={80} value={customIssuer} onChange={e => setCustomIssuer(e.target.value)}/></label>}
-          {isCard && <><label className="min-w-0">Card / product<select className="field" value={product} onChange={e => { setProduct(e.target.value); const found=products.find(p=>p.product===e.target.value); setNetwork(found && found.network!=="Varies / not specified" ? found.network : ""); }}><option value="">Select product (optional)</option>{product&&!products.some(p=>p.product===product)&&<option>{product}</option>}{products.map((p,i)=><option key={`${p.product}-${i}`} value={p.product}>{p.product}</option>)}</select></label>
+          {isCard && <><label className="min-w-0">Card / product<select className="field" value={product} onChange={e => { setProduct(e.target.value); const found=products.find(p=>p.product===e.target.value); setNetwork(found && found.network!=="Varies / not specified" ? found.network : ""); }}><option value="">Select product (optional)</option>{product&&!products.some(p=>p.product===product)&&<option value={product}>{productLabel(product)}</option>}{products.map((p,i)=><option key={`${p.product}-${i}`} value={p.product}>{productLabel(p.product)}</option>)}</select></label>
             <label className="min-w-0">Card network<select className="field" value={network} onChange={e=>setNetwork(e.target.value)}><option value="">Select network</option>{network&&!cardNetworks.includes(network)&&<option>{network}</option>}{cardNetworks.map(n=><option key={n}>{n}</option>)}</select></label>
             <label className="min-w-0">Last 4 digits (optional)<input className="field" name="last4" inputMode="numeric" pattern="[0-9]{4}" maxLength={4} defaultValue={account?.last4 ?? ""}/></label></>}
         </>}
         {type==="credit_card"&&<label className="min-w-0">Credit limit · PHP<input className="field" name="creditLimit" type="number" inputMode="decimal" required min="0.01" step="0.01" defaultValue={account?.credit_limit ? account.credit_limit/100 : ""}/></label>}
-        <label className="min-w-0 sm:col-span-2">Account name (optional)<input className="field" name="name" maxLength={80} defaultValue={account?.name} placeholder="Auto-generated from provider and product" aria-describedby="account-name-hint"/><span id="account-name-hint" className="mt-1 block text-xs text-muted-foreground">Leave blank to use the provider and product, or account type.</span></label>
+        <label className="min-w-0 sm:col-span-2">Account name (optional)<input className="field" name="name" maxLength={80} defaultValue={account?.name === generatedName ? "" : account?.name} placeholder="Auto-generated from provider and product" aria-describedby="account-name-hint"/><span id="account-name-hint" className="mt-1 block text-xs text-muted-foreground">Leave blank to use the provider and product, or account type.</span></label>
         {["cash","bank","wallet"].includes(type)?<label className="flex min-h-11 items-center gap-3 sm:col-span-2"><input className="size-5" name="liquid" type="checkbox" defaultChecked={Boolean(account?.liquid)}/>Liquid cash/bank/wallet for cash-flow reports</label>:<input type="hidden" name="liquid" value={account?.liquid ? "on" : ""}/>}
       </fieldset>
       {error&&<p id="account-error" role="alert" className="break-words text-destructive sm:col-span-2">{error}</p>}

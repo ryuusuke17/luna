@@ -6,9 +6,10 @@ import {api} from "@/lib/api";
 type Archive={id:number;filename:string;created_at:string;summary:Record<string,string|number>;warnings:string[];rows:unknown[];rawSummary:unknown[]};
 export default function LegacyStatementArchives({account,initialId}:{account?:string;initialId?:number}={}){
  const [open,setOpen]=useState(Boolean(initialId)),[page,setPage]=useState(1),[id,setId]=useState<number|null>(initialId??null);
- const list=useQuery({queryKey:["legacy-statement-archives",account,page],queryFn:()=>api<{items:Archive[];total:number;pageSize:number}>(`statement-archives?page=${page}${account?`&account=${encodeURIComponent(account)}`:""}`),enabled:open&&!initialId});
+ const list=useQuery({queryKey:["legacy-statement-archives",account,page],queryFn:()=>api<{items:Archive[];total:number;pageSize:number}>(`statement-archives?page=${page}${account?`&account=${encodeURIComponent(account)}`:""}`),enabled:!initialId});
  const detail=useQuery({queryKey:["legacy-statement-archive",account,id],queryFn:()=>api<Archive>(`statement-archives/${id}`),enabled:open&&id!==null});
  if(initialId)return <section className="mt-2 min-w-0 space-y-2 text-xs" aria-label="Legacy source data"><p className="text-muted-foreground">Legacy reference · original fields retained; excluded from dashboard totals.</p>{detail.isPending?<p role="status">Loading original fields…</p>:detail.error?<p role="alert">{detail.error.message}</p>:<pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words">{JSON.stringify(detail.data,null,2)}</pre>}</section>;
+ if(list.isPending||(!list.error&&!list.data?.total))return null;
  return <details open={open} className="panel mt-3 p-3 sm:p-4 text-sm" onToggle={e=>setOpen(e.currentTarget.open)}>
   <summary className="cursor-pointer font-semibold py-1">Legacy reference archives</summary>
   <p className="my-2 text-xs text-muted-foreground">Existing files remain unchanged. Legacy archives lack validated card/currency/payment coverage; excluded from dashboard totals. Re-import originals through Import for reviewed tracking.</p>

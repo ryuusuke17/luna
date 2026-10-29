@@ -32,6 +32,12 @@ export function accountSummary(accounts: Account[]) {
   return { cashWallet, statementBalances: [...currencies].sort(([a], [b]) => a.localeCompare(b)), missingStatements };
 }
 export const accountLabels: Record<AccountType, string> = { credit_card: "Credit card", bank: "Debit card / bank", wallet: "E-wallet", cash: "Cash", loan: "Loan", asset: "Other asset", liability: "Other liability" };
+export function defaultAccountName(type: AccountType, issuer?: string | null, product?: string | null) {
+  const provider = issuer?.trim() ?? "";
+  const cardProduct = type === "credit_card" || type === "bank" ? product?.trim() ?? "" : "";
+  const productIncludesProvider = provider && (cardProduct.toLowerCase() === provider.toLowerCase() || cardProduct.toLowerCase().startsWith(`${provider.toLowerCase()} `));
+  return (productIncludesProvider ? cardProduct : [provider, cardProduct].filter(Boolean).join(" ") || accountLabels[type]).slice(0, 80);
+}
 export const debtAccount = (type: string) => ["credit_card", "loan", "liability"].includes(type);
 // Preserve database property order for the existing optimistic-concurrency comparison.
 export function editableAccountRecord(account: Account) {

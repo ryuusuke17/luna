@@ -37,7 +37,7 @@ CREATE INDEX IF NOT EXISTS statement_archives_owner_idx ON statement_archives(ow
 addColumn("transactions","merchant","TEXT NOT NULL DEFAULT ''");addColumn("transactions","notes","TEXT NOT NULL DEFAULT ''");addColumn("transactions","is_installment","INTEGER CHECK(is_installment IN (0,1))");addColumn("budgets","name","TEXT NOT NULL DEFAULT ''");
 db.function("transaction_type",{deterministic:true},(kind,isInstallment,description,merchant,notes)=>transactionType({kind:String(kind),is_installment:isInstallment===null?null:Number(isInstallment),description:String(description),merchant:String(merchant),notes:String(notes)}));
 db.exec(`
-CREATE TABLE IF NOT EXISTS bills(id INTEGER PRIMARY KEY,owner_id INTEGER NOT NULL REFERENCES users(id),name TEXT NOT NULL,amount INTEGER NOT NULL CHECK(amount>0),due_date TEXT NOT NULL,account_id INTEGER NOT NULL REFERENCES accounts(id),category_id INTEGER REFERENCES categories(id),cadence TEXT NOT NULL DEFAULT 'once',notes TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS bills(id INTEGER PRIMARY KEY,owner_id INTEGER NOT NULL REFERENCES users(id),name TEXT NOT NULL,amount INTEGER NOT NULL CHECK(amount>0),due_date TEXT NOT NULL,account_id INTEGER REFERENCES accounts(id),category_id INTEGER REFERENCES categories(id),cadence TEXT NOT NULL DEFAULT 'once',notes TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS bill_payments(bill_id INTEGER PRIMARY KEY REFERENCES bills(id),owner_id INTEGER NOT NULL REFERENCES users(id),transaction_id INTEGER NOT NULL UNIQUE REFERENCES transactions(id),created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS goals(id INTEGER PRIMARY KEY,owner_id INTEGER NOT NULL REFERENCES users(id),name TEXT NOT NULL,target INTEGER NOT NULL CHECK(target>0),due_date TEXT,notes TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS goal_contributions(id INTEGER PRIMARY KEY,owner_id INTEGER NOT NULL REFERENCES users(id),goal_id INTEGER NOT NULL REFERENCES goals(id),amount INTEGER NOT NULL CHECK(amount>0),posted_date TEXT NOT NULL,notes TEXT NOT NULL DEFAULT '',request_key TEXT NOT NULL,UNIQUE(owner_id,request_key));
@@ -52,6 +52,16 @@ CREATE UNIQUE INDEX IF NOT EXISTS csv_source_idx ON csv_import_rows(owner_id,acc
 addColumn("statement_import_rows","import_id","INTEGER REFERENCES statement_imports(id)");
 
 addColumn("bills","payment_kind","TEXT NOT NULL DEFAULT 'expense'");
+
+const billAccountColumn=(db.pragma("table_info(bills)") as {name:string;notnull:number}[]).find(column=>column.name==="account_id");
+if(billAccountColumn?.notnull){
+ db.pragma("foreign_keys=OFF");
+ try{db.transaction(()=>{
+  db.exec("CREATE TABLE bills_unassigned_migration(id INTEGER PRIMARY KEY,owner_id INTEGER NOT NULL REFERENCES users(id),name TEXT NOT NULL,amount INTEGER NOT NULL CHECK(amount>0),due_date TEXT NOT NULL,account_id INTEGER REFERENCES accounts(id),category_id INTEGER REFERENCES categories(id),cadence TEXT NOT NULL DEFAULT 'once',notes TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,payment_kind TEXT NOT NULL DEFAULT 'expense')");
+  db.exec("INSERT INTO bills_unassigned_migration(id,owner_id,name,amount,due_date,account_id,category_id,cadence,notes,created_at,payment_kind) SELECT id,owner_id,name,amount,due_date,account_id,category_id,cadence,notes,created_at,payment_kind FROM bills");
+  db.exec("DROP TABLE bills; ALTER TABLE bills_unassigned_migration RENAME TO bills");
+ })();}finally{db.pragma("foreign_keys=ON");}
+}
 
 addColumn("transactions","original_currency","TEXT NOT NULL DEFAULT 'PHP'");
 addColumn("transactions","original_amount","INTEGER");

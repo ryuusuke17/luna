@@ -5,6 +5,7 @@ import { balanceFor, createTransaction } from "../../lib/ledger";
 import { requireMutation, requireUser } from "../../lib/request";
 import { isCalendarDate, parseMoney } from "../../../src/lib/finance";
 import { accountHistory, selectAccountDisplay } from "../../lib/account-details";
+import { defaultAccountName } from "../../../src/lib/accounts";
 
 const optionalText = (value: unknown) => value === undefined || typeof value === "string" && value.trim().length <= 160;
 
@@ -17,7 +18,7 @@ export default defineHandler(async event => {
   if (event.req.method !== "POST") throw createError({ statusCode: 405, statusMessage: "Method not allowed" });
   requireMutation(event);
   const body = await readBody<any>(event);
-  if (typeof body?.name !== "string" || !body.name.trim() || body.name.length > 80 || !isCalendarDate(body.openingDate) || body.openingDate > new Date().toISOString().slice(0, 10) || !["cash", "bank", "wallet", "credit_card", "loan", "asset", "liability"].includes(body.type) || typeof body.liquid !== "undefined" && typeof body.liquid !== "boolean" || !optionalText(body.issuer) || !optionalText(body.product) || !optionalText(body.network)) {
+  if (!body || body.name !== undefined && (typeof body.name !== "string" || body.name.length > 80) || !isCalendarDate(body.openingDate) || body.openingDate > new Date().toISOString().slice(0, 10) || !["cash", "bank", "wallet", "credit_card", "loan", "asset", "liability"].includes(body.type) || typeof body.liquid !== "undefined" && typeof body.liquid !== "boolean" || !optionalText(body.issuer) || !optionalText(body.product) || !optionalText(body.network)) {
     throw createError({ statusCode: 400, statusMessage: "Invalid account" });
   }
   let balance = 0;
@@ -32,7 +33,7 @@ export default defineHandler(async event => {
   const last4 = typeof body.last4 === "string" && /^\d{4}$/.test(body.last4) ? body.last4 : null;
   const id = atomic(() => {
     const result = db.prepare("INSERT INTO accounts(owner_id,name,type,liquid,opening_date,last4,credit_limit,issuer,product,network) VALUES(?,?,?,?,?,?,?,?,?,?)")
-      .run(user.id, body.name.trim(), body.type, body.liquid ? 1 : 0, body.openingDate, last4, creditLimit, body.issuer?.trim() || null, body.product?.trim() || null, body.network?.trim() || null);
+      .run(user.id, body.name?.trim() || defaultAccountName(body.type, body.issuer, body.product), body.type, body.liquid ? 1 : 0, body.openingDate, last4, creditLimit, body.issuer?.trim() || null, body.product?.trim() || null, body.network?.trim() || null);
     const accountId = Number(result.lastInsertRowid);
     if (balance) createTransaction(user.id, { kind: "opening", date: body.openingDate, amount: balance, accountId, idempotencyKey: `opening-${accountId}` });
     return accountId;

@@ -106,6 +106,8 @@ const explanations: Record<string, string> = {
   "Transfers cannot have a category": "Transfers do not use categories. Clear the category before saving.",
   "Invalid review decision": "Check row membership, category, funding and resolution values before retrying.",
   "Statement unavailable": "This upload is unavailable. Reload Transactions and choose an existing import.",
+  "Statement unavailable for this account": "Statement unavailable for this account. Choose an owned credit-card statement or change the account selection.",
+  "Dashboard unavailable; retry or review filters": "Choose valid statement filters, or clear them and try again.",
   "Statement unavailable. Check private storage or retry.": "Statement unavailable. Check private storage or retry.",
   "Only unapproved uploads can be removed. Approved or reconciled statements must be kept.": "Only unapproved uploads can be removed. Approved or reconciled statements must be kept.",
   "Statement changed. Close this dialog and review it again before removing.": "Statement changed. Close this dialog and review it again before removing.",
@@ -154,7 +156,7 @@ export function clearMessage(value: unknown): string | undefined {
 
 export function requestMessage(status: number, body: unknown, path: string, method = "GET"): string {
   const endpoint = path.split("?")[0];
-  const labels: Record<string, string> = {accounts:"accounts",transactions:"transactions",reports:"financial reports",budgets:"budgets",bills:"bill reminders",goals:"goals",categories:"categories",preferences:"workspace preferences","merchant-rules":"merchant rules",providers:"service providers","import-history":"import history",statements:"transaction imports","credit-card-statements":"credit card statements",imports:"statement imports","csv-imports":"CSV imports","bill-payments":"bill payments","goal-contributions":"goal allocations",search:"search results",export:"export file","auth/me":"session details","auth/login":"sign-in","auth/setup":"owner setup","auth/logout":"sign-out"};
+  const labels: Record<string, string> = {accounts:"accounts",transactions:"transactions",reports:"financial reports",budgets:"budgets",bills:"bill reminders",goals:"goals",categories:"categories",preferences:"workspace preferences","merchant-rules":"merchant rules",providers:"service providers","import-history":"import history",statements:"transaction imports","credit-card-statements":"credit card statements","credit-card-dashboard":"statement activity",imports:"statement imports","csv-imports":"CSV imports","bill-payments":"bill payments","goal-contributions":"goal allocations",search:"search results",export:"export file","auth/me":"session details","auth/login":"sign-in","auth/setup":"owner setup","auth/logout":"sign-out"};
   const label = endpoint.split("/")[0] === "statement-archives" ? "statement archive" : labels[endpoint] ?? labels[endpoint.split("/")[0]] ?? "workspace records";
   if (status >= 500) return `Luna could not ${method === "GET" ? "load" : "process"} ${label} because the server encountered a problem. Try again shortly.${method !== "GET" ? " Check the records before retrying; the result is not confirmed." : ""}`;
   if (status === 401) return "Your session has ended. Sign in again to continue.";

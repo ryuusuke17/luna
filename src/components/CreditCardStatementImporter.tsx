@@ -5,6 +5,7 @@ import {Button} from "@/components/WorkspaceButton";
 import {api,send} from "@/lib/api";
 import {formatMoney,supportedCurrencies,currencyDigits} from "@/lib/finance";
 import {cardLabel,type ImportResult,type StatementDashboard} from "@/lib/credit-card-statements";
+import CreditCardImportHistory from "@/components/CreditCardImportHistory";
 
 export default function CreditCardStatementImporter({initialAccount}:{initialAccount?:string}){
  const client=useQueryClient(),cards=useQuery({queryKey:["credit-card-statements","cards"],queryFn:()=>api<StatementDashboard>("credit-card-statements")});
@@ -31,7 +32,7 @@ export default function CreditCardStatementImporter({initialAccount}:{initialAcc
   catch(reason){setError((reason as Error).message);}finally{setBusy(false);}
  }
  const p=result?.preview;
- return <section className="panel mt-2 w-full p-3 sm:p-4 text-sm space-y-3" aria-labelledby="credit-card-import-title">
+ return <section className="panel mt-2 w-full p-5 sm:p-7 text-sm space-y-4" aria-labelledby="credit-card-import-title">
   <h2 id="credit-card-import-title" className="text-base font-semibold leading-none">Import Credit Card Statement</h2>
   <p className="text-xs text-muted-foreground">Statements only. No ledger transactions, account balances or payment postings change. One file per exact card. Currency requires explicit selection.</p>
   <p className="text-xs text-muted-foreground">Statement summary first; then Sale date, Post date, Merchant, Amount, Category, Transaction notes, Transaction type. Sale date may be blank; Post date is required. Expense, Installments and Card repayment received stay separate from Category. Positive billed charges; negative payments/credits. Earlier Type-column templates remain supported.</p>
@@ -41,7 +42,7 @@ export default function CreditCardStatementImporter({initialAccount}:{initialAcc
    <label>Statement currency<select required className="field text-xs" value={currency} onChange={e=>setCurrency(e.target.value)}><option value="">Choose printed currency</option>{supportedCurrencies.filter(c=>currencyDigits(c)===2).map(c=><option key={c} value={c}>{c}</option>)}</select></label>
    <label>Statement CSV<input required className="field text-xs max-w-full" type="file" accept=".csv,text/csv" onChange={e=>setFile(e.target.files?.[0]??null)}/></label>
    <div className="sm:col-span-2 flex justify-end pt-1">
-    <Button size="sm" disabled={busy||!cardId||!currency||!file} aria-busy={busy}>{busy?"Parsing…":"Parse and preview statement"}</Button>
+    <Button size="sm" disabled={busy||!cardId||!currency||!file} aria-busy={busy}>{busy?"Parsing…":"Preview and Import Statement"}</Button>
    </div>
   </fieldset></form>}
   {error&&<p role="alert" className="break-words text-xs text-destructive">{error}</p>}
@@ -61,5 +62,6 @@ export default function CreditCardStatementImporter({initialAccount}:{initialAcc
    </fieldset>
   </div>}
   {result&&!p&&<div className="flex justify-end pt-1"><Button variant="outline" size="sm" onClick={reset}>Import another statement</Button></div>}
+  <CreditCardImportHistory account={cardId}/>
  </section>;
 }

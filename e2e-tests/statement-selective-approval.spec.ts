@@ -25,11 +25,11 @@ test("sole statement uploader preserves legacy account context without retired d
   await page.goto(path);await expect(page).toHaveURL(/\/import-export(?:\?|$)/);
   const importer=page.getByRole("region",{name:"Import Credit Card Statement",exact:true});await expect(importer).toHaveCount(1);await expect(importer).toBeVisible();
   if(path.includes("account=2")){await expect(page).toHaveURL(/account=2/);await expect(importer.getByRole("combobox",{name:"Exact credit card",exact:true})).toHaveValue("2");}
-  await expect(page.getByRole("heading",{name:"Import transactions",exact:true})).toHaveCount(0);await expect(page.getByRole("button",{name:"Import transactions",exact:true})).toHaveCount(0);await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByRole("heading",{name:"Import transactions",exact:true})).toHaveCount(0);await expect(page.getByRole("button",{name:"Import transactions",exact:true})).toHaveCount(0);await expect(page.getByRole("region",{name:"Transaction imports",exact:true})).toHaveCount(0);await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(importer).toContainText("No ledger transactions, account balances or payment postings change.");
   const template=importer.getByRole("link",{name:"Download Statement CSV Template",exact:true});await template.focus();await page.keyboard.press("Tab");await expect(importer.getByRole("link",{name:"Download earlier UnionBank sample",exact:true})).toBeFocused();
   await page.getByRole("tab",{name:"Export",exact:true}).click();await expect(page.getByRole("button",{name:"Export all transactions",exact:true})).toBeVisible();
-  await page.getByRole("tab",{name:"Import",exact:true}).click();await expect(page.getByRole("region",{name:"Transaction imports",exact:true})).toBeVisible();
+  await page.getByRole("tab",{name:"Import",exact:true}).click();await expect(page.getByRole("region",{name:"Transaction imports",exact:true})).toHaveCount(0);
  }
  await page.goto("/transactions?account=1&upload=1");await expect(page.getByRole("region",{name:"Import Credit Card Statement",exact:true})).toBeVisible();await expect(page.getByRole("dialog")).toHaveCount(0);await expect(page).toHaveURL(/account=1&tab=import$/);
  expect(fixture.requests.filter(request=>request.method!=="GET")).toEqual([]);expect(errors).toEqual([]);

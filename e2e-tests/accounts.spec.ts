@@ -1,8 +1,8 @@
 import {test,expect,type Page} from "@playwright/test";
 import {reviewDialog,reviewFocusLoop} from "./fixtures/accessibility";
 
-async function workspace(page:Page){
- const record={id:1,owner_id:1,name:"Daily bank",type:"bank",liquid:1,opening_date:"2025-01-01",archived_at:null,last4:"4321",credit_limit:null,reconciled_through:null,issuer:"BPI",product:null,network:"Visa",reconciliation_stale:0};
+async function workspace(page:Page,overrides:Record<string,unknown>={}){
+ const record={id:1,owner_id:1,name:"Daily bank",type:"bank",liquid:1,opening_date:"2025-01-01",archived_at:null,last4:"4321",credit_limit:null,reconciled_through:null,issuer:"BPI",product:null,network:"Visa",reconciliation_stale:0,...overrides};
  const snapshot={id:"archive:8",source:"archive",sourceId:8,filename:"April statement.csv",date:"2026-04-30",currency:"PHP",amount:123400,semantics:"asset-positive",status:"Legacy reference",eligible:true,dueDate:null,minimumDue:null,download:"/api/statement-archives/8/download",view:""};
  const writes:{path:string;method:string;body:Record<string,unknown>}[]=[],errors:string[]=[];
  let fail=false;
@@ -108,6 +108,25 @@ test("account creation defaults date and optional name with concise ShopMore pro
  await dialog.getByRole("button",{name:"Save account",exact:true}).click();
  await expect(dialog).not.toBeVisible();
  expect(state.writes[1].body.name).toBe("Cash");
+ expect(state.errors).toEqual([]);
+});
+
+test("blank and whitespace account names save when editing BDO settings",async({page})=>{
+ const state=await workspace(page,{name:"BDO Mastercard Debit",issuer:"BDO",product:"BDO Mastercard Debit",network:"Mastercard"});
+ await page.goto("/accounts/1");
+ for(const blank of ["","   "]){
+  await page.getByRole("button",{name:"Edit details",exact:true}).click();
+  const dialog=page.getByRole("dialog",{name:"Edit account details"}),name=dialog.getByLabel("Account name (optional)");
+  await expect(name).not.toHaveAttribute("required","");
+  await expect(name).toHaveValue("");
+  await expect(dialog.getByLabel("Card / product").locator("option:checked")).toHaveText("Mastercard Debit");
+  await name.fill(blank);
+  await dialog.getByRole("button",{name:"Save changes",exact:true}).click();
+  await expect(dialog).not.toBeVisible();
+  await expect(page.getByRole("heading",{name:"BDO Mastercard Debit",exact:true})).toBeVisible();
+ }
+ expect(state.writes).toHaveLength(2);
+ for(const write of state.writes)expect(write.body).toMatchObject({name:"BDO Mastercard Debit",product:"BDO Mastercard Debit",network:"Mastercard",last4:"4321"});
  expect(state.errors).toEqual([]);
 });
 

@@ -71,6 +71,16 @@
  .records-table[aria-label="Transaction records, horizontally scrollable"] :is(th,td):is(:first-child,:nth-child(2),:nth-child(5),:nth-child(6),:last-child) { @apply w-px whitespace-nowrap; }
  .records-table[aria-label="Transaction records, horizontally scrollable"] :is(th,td):nth-child(5) { @apply text-right; }
  .records-table[aria-label="Transaction records, horizontally scrollable"] td.amount > span { @apply ml-1 !inline; }
+ .statement-activity-table :is(th,td) { @apply px-5 py-4 align-middle; }
+ .statement-activity-table th { @apply py-3; }
+ .statement-activity-table :is(th,td):first-child { @apply w-px whitespace-nowrap pl-8; }
+ .statement-activity-table :is(th,td):is(:nth-child(2),:nth-child(3)) { @apply whitespace-nowrap; }
+ .statement-activity-table :is(th,td):nth-child(5) { @apply text-right whitespace-nowrap; }
+ .statement-activity-table tbody tr:hover > * { @apply bg-muted/40; }
+ .statement-transactions-table :is(th,td) { @apply px-4 py-3 align-middle; }
+ .statement-transactions-table th { @apply py-2; }
+ .statement-transactions-table :is(th,td):first-child { @apply w-px whitespace-nowrap px-5; }
+ .statement-transactions-table :is(th,td):nth-child(2) { @apply px-3; }
  .metric { @apply mt-2 font-medium tabular-nums; font-size:clamp(22px,2.1vw,28px); line-height:1.2; letter-spacing:-.035em; overflow-wrap:anywhere; }
  .eyebrow { @apply text-xs font-semibold uppercase tracking-[.16em] text-muted-foreground; }
  .dark-band { --foreground:0 0% 100%; --muted-foreground:0 0% 72%; --primary:0 0% 100%; --primary-foreground:0 0% 0%; --border:210 5% 22%; --input:210 5% 40%; --card:210 8% 9%; --card-foreground:0 0% 100%; --background:0 0% 0%; --muted:210 8% 16%; --accent:210 8% 16%; --accent-foreground:0 0% 100%; background:#000; color:#fff; }
@@ -116,6 +126,7 @@
  .record-amount { flex-shrink:0; text-align:right; font-weight:600; font-variant-numeric:tabular-nums; }
  .records-table { display:none; }
  .workspace-dialog { display:block!important; max-width:min(42rem,calc(100vw - 32px)); max-height:calc(100dvh - 32px)!important; overflow:visible!important; padding:0!important; border-radius:16px; background:hsl(var(--card)); box-shadow:none; }
+ .workspace-dialog.bill-details-dialog { max-width:min(40rem,calc(100vw - 32px)); }
  .dialog-scroll { border-radius:inherit; max-height:calc(100dvh - 34px); overflow-y:auto; overscroll-behavior:contain; padding:20px; min-width:0; scroll-padding-block:12px; }
  .dialog-scroll > :first-child { padding-right:40px; text-align:left; margin-bottom:16px; }
  .dialog-scroll > * { min-width:0; overflow-wrap:anywhere; }

@@ -287,3 +287,162 @@ Updated: October 15, 2026. Implementation and isolated validation; no live-works
 - Browser logs: temporary luna-transaction-first-browser-final.log and luna-transaction-first-focused-final.log. Build log: temporary luna-transaction-first-build-final.log. Full lint diagnostics: temporary luna-transaction-first-lint.json.
 - Migration snapshots: migration-backups/transaction-first-<UUID>/ beside the configured database. Preserve luna.sqlite, private-statements/, and manifest.json together; stop application processes before any restore.
 - Existing user changes preserved: DESIGN-revolut.md deletion, DESIGN.md, supplied statement files, and prior PROJECT_GUIDE.md content outside this workflow update. No sample reset, live import, commit, or branch creation.
+
+# Per-Statement Filtering and Transactions Separation
+
+Date: October 19, 2026.
+Status: Complete. Source activity stays read-only; ledger behavior unchanged.
+
+## Done
+- Exact owner/card-scoped statement queries include every imported source line; explicit correction-chain links show only active ledger transactions without duplicate rows.
+- Account details and Statements reuse statement activity in Per statement mode; account details also filters statement source lines by issue month while preserving calendar month as posted-date ledger history. Main Transactions is limited at the query level to manually entered records with no credit-card account relationship; calendar/custom/all-time ledger controls remain available.
+- Independent Statements selector scopes cards and activity together, supports older choices, and preserves separate source-detail state. URL transitions retain activity filters and reset pages without stale issue rows.
+- Account 4 / statement #2: Account details and Statements retain the same 20 source lines, including August purchases, September installments, and the PHP -11,000.00 credit. Main Transactions strips statement-mode URLs and remains scoped to manual non-card ledger records.
+- Read-only before/after SHA-256 checks match all 10 financial/source tables, including ledger entries, statement original bytes, decisions, annotations, and payment evidence. No live imports, posting, relinking, migrations, payment changes, commits, branches, or prototype edits.
+
+## Verification
+- Full `npm.cmd test`: 153 passed. App TypeScript check and production build: passed. `git diff --check`: passed.
+- Playwright: the earlier mocked filter/navigation/loading/error/keyboard/responsive checks and disposable real-API integration passed. The updated focused browser run passes four checks covering main Transactions separation and the Accounts/Statements activity paths; API tests verify that card and imported rows are excluded before totals and pagination.
+- Earlier responsive screenshots apply to the card account and Statements views. The main Transactions regression check verifies that legacy statement URLs are removed and the page requests the manual non-card scope.
+- Full lint: 117 existing errors and 12 warnings remain. ESLint comparison against HEAD across all 17 changed TypeScript files finds zero introduced diagnostics; see `test-results/per-statement-lint-delta.json`.
+- Logs: `test-results/per-statement-node-final.log`, `test-results/per-statement-types-final.log`, `test-results/per-statement-build-final.log`, `test-results/per-statement-lint-final.log`, `test-results/per-statement-browser.log`, and `test-results/per-statement-isolated.log`. Data evidence: `test-results/per-statement-live-before.json` and `test-results/per-statement-live-after.json`.
+
+## Not Checked
+- Physical-device and full screen-reader conformance; browser viewport and keyboard checks are emulated. No production deployment or live financial writes performed.
+
+# Statements Page Tabs and Independent Filters
+
+Date: October 20, 2026.
+
+## Done
+- Split the global Statements route into URL-backed Statement transactions (default) and Statements tabs. Imported activity and issued-statement metadata now use separate URL keys and separate server queries, so each tab keeps its own filters and pagination.
+- Added independent activity card, issue-month, exact-statement, and line filters. Added a compact Apply/Reset popover for statement metadata and a dense month-grouped statement list, without changing the Accounts page's compact statement rows.
+- Updated the account's “All statements for this card” link and statement detail navigation to open the intended tab and preserve the statement scope.
+
+## Verification
+- Frontend TypeScript check, focused credit-card dashboard tests (2 passed), focused ESLint (0 errors; one existing AccountDetails hook warning), Playwright spec discovery, and `git diff --check`: passed. Impeccable detector on the changed UI files: no findings.
+- Authenticated browser flow was not run because `LUNA_E2E_ISOLATED_URL` is unset. The live dev workspace was left untouched; no transaction or statement data was written or moved.
+
+# Statement List Navigation on Statements and Credit-Card Accounts
+
+Date: October 20, 2026.
+
+## Done
+- Removed tracker-status text and tracker-evidence labels from every shared issued-statement list layout. Statement metadata, grouping, and list pagination are unchanged.
+- Renamed the list action to `onView`. Both pages now open Statement transactions scoped to the clicked statement; account navigation carries only `activityStatement`, while the Statements page clears previous activity filters and retains inactive list filters.
+- Added navigation-state focus handling for the active transactions tab, preserved browser Back context, and retained independent detail entry through account activity's `Open statement` link.
+- Updated existing navigation/detail tests and added a mocked account #4 fixture with two statements in the same month and 27 source lines to cover exact membership, pagination, out-of-month sale dates, refresh, Back, older statement choices, keyboard activation, and mobile taps.
+
+## Verification
+- Seven focused Playwright regressions passed across the final runs: five new navigation/detail checks, the independent activity-selector regression, and the shared approval/account-history regression. All browser API responses were mocked, including approval in the shared regression; no live financial data was changed.
+- Visually inspected desktop (1440 px) and mobile (390 px) captures of both statement-list layouts; labels are absent, controls remain aligned, and the browser checks found no document overflow.
+- Frontend TypeScript check and the full unit-test step of `npm.cmd run build` passed. The sandboxed build reached Nitro dependency tracing and hit a filesystem-link permission error; the standalone production build succeeded when rerun with the required filesystem access.
+- Focused ESLint: zero errors and one existing AccountDetails hook-dependency warning. Impeccable detector: no findings. The optional disposable-server import test was updated; it was not executed against the live workspace.
+
+# BDO Product Dropdown Labels
+
+Date: October 20, 2026.
+
+- Removed the leading BDO name from product option labels in the shared account dialog, including existing/custom selected products. Underlying option values and saved product identities remain unchanged.
+- Verified the live account editor shows Visa Debit and Mastercard Debit, with Mastercard Debit still selected. Screenshot: C:/Users/Mikey/.codex/visualizations/2026/10/20/01a15985-8084-7aa3-a33a-e8dc35b133f7/bdo-product-labels.png.
+- Focused ESLint, git diff whitespace check, and Impeccable detector passed (no findings). Frontend TypeScript check is blocked by the existing unrelated Goals.tsx:92 onPointerDownOutside prop error.
+
+# Optional Account Name Saves
+
+Date: October 20, 2026.
+
+- Create and edit APIs now accept omitted, empty, and whitespace-only account names and generate the default name through the same helper as the form. Provider prefixes are included once, so blank BDO names become BDO Mastercard Debit. Explicit-name validation, account concurrency checks, and financial entries are preserved.
+- Added real authenticated in-memory API regressions for blank/whitespace/omitted names, default type names, invalid/custom names, stale saves, and unchanged transactions/balances. Added a mocked browser edit regression; Playwright discovers it and the existing creation regression.
+- npm test: 159 passed. Focused component/helper/new-test ESLint, Impeccable detector, and whitespace checks passed. App TypeScript check still reports the unrelated existing Goals.tsx:92 onPointerDownOutside prop error.
+- Live UI: cleared the selected BDO account name and clicked Save changes; the editor closed successfully and the account now displays BDO Mastercard Debit. This was the requested account-name setting save. Screenshot: C:/Users/Mikey/.codex/visualizations/2026/10/20/01a15985-8084-7aa3-a33a-e8dc35b133f7/blank-account-name-saved.png.
+- Follow-up from the reopened-editor screenshot: accounts with an automatically generated name now show an actually empty account-name input when edited again; custom account names remain in the field. Saved BDO account still displays as BDO Mastercard Debit. Reopened the live editor and verified the name input is blank, then saved it blank successfully. Screenshot: C:/Users/Mikey/.codex/visualizations/2026/10/20/01a15985-8084-7aa3-a33a-e8dc35b133f7/optional-account-name-field.png.
+- Follow-up focused ESLint, git diff whitespace check, and Impeccable detector passed (no findings). The new mocked browser regression asserts the generated-name field is empty; it was not run in this follow-up.
+
+# Bill Summary Rows
+
+Date: October 20, 2026.
+
+- Bill rows now show a bill-type icon, concise name/account/category summary, and a larger amount. Removed the per-row status and reminder-preference text, and replaced the overflow menu with separate icon-only view, edit, and payment buttons.
+- Visually checked the live `/bills` page: electricity uses a lightning icon, mobile uses Wi-Fi, rent uses a home icon, amounts stand out, and each row has individual icon actions. Screenshot: C:/Users/Mikey/.codex/visualizations/2026/10/20/01a15985-8084-7aa3-a33a-e8dc35b133f7/bills-summary.png.
+- Focused ESLint, git diff whitespace check, and Impeccable detector passed with no findings. No automated tests run in this pass.
+
+# Bill Name Type Size
+
+Date: October 20, 2026.
+
+- Increased bill names from `text-sm` to `text-base` so they stand out more clearly from account and category details.
+- Verified the live `/bills` page after refresh. Screenshot: C:/Users/Mikey/.codex/visualizations/2026/10/20/01a15985-8084-7aa3-a33a-e8dc35b133f7/bills-larger-title.png.
+- Focused ESLint and `git diff --check` passed. Impeccable detector was unavailable in this shell (`impeccable.cmd` was not found). No automated tests run in this pass.
+
+# Capitalized Bill Cadence Options
+
+Date: October 20, 2026.
+
+- Capitalized the cadence option labels in the bill reminder editor while retaining lowercase submitted values (`once`, `monthly`, `quarterly`, `yearly`).
+- Verified the live edit dialog displays Once, Monthly, Quarterly, and Yearly, with Monthly still selected. Screenshot: C:/Users/Mikey/.codex/visualizations/2026/10/20/01a15985-8084-7aa3-a33a-e8dc35b133f7/bill-cadence-capitalized.png.
+- Focused ESLint and `git diff --check` passed. No automated tests run for this label-only change.
+
+# Bill Details Dialog Layout
+
+Date: October 20, 2026.
+
+- Widened the bill details dialog and reorganized its content into a prominent amount panel, a labeled details grid, and a distinct action footer. The grid shows due date, account, reminder preference, category, and notes.
+- Verified the refreshed live dialog visually and through its accessibility tree. Screenshot: C:/Users/Mikey/.codex/visualizations/2026/10/20/01a15985-8084-7aa3-a33a-e8dc35b133f7/bill-details-dialog.png.
+- Focused ESLint and `git diff --check` passed. No automated tests run for this layout adjustment.
+
+# Bills Mark-as-Paid Controls
+
+Date: October 20, 2026.
+
+- Removed the row-level edit icon. Unpaid reminders now show a text Mark as paid button that opens the existing full-payment ledger form; its title and submit action use the same wording. Paid reminders show a green check and Paid status.
+- Verified the live Upcoming and Paid tabs and opened then closed the payment form without submitting. Screenshots: C:/Users/Mikey/.codex/visualizations/2026/10/20/01a15985-8084-7aa3-a33a-e8dc35b133f7/bills-mark-as-paid.png and C:/Users/Mikey/.codex/visualizations/2026/10/20/01a15985-8084-7aa3-a33a-e8dc35b133f7/bills-paid-status.png.
+- Focused ESLint and `git diff --check` passed. No automated tests run for this UI change.
+
+# Tighter Bill Row Text Spacing
+
+Date: October 20, 2026.
+
+- Reduced the gap between bill names and account/category details by removing the fixed title height and tightening line height and metadata margin.
+- Verified the live Bills list, including the apartment rent row. Screenshot: C:/Users/Mikey/.codex/visualizations/2026/10/20/01a15985-8084-7aa3-a33a-e8dc35b133f7/bills-tight-text-spacing.png.
+- Focused ESLint and `git diff --check` passed.
+
+# Bill Payment Account Selection
+
+Date: October 20, 2026.
+
+- Removed Account from the add/edit reminder form. Unpaid reminders can now be saved without an assigned account; Mark as paid requires the account used for the posted ledger expense. Credit repayments ask for both the card and funding account.
+- Added a migration that makes legacy bill accounts nullable while preserving existing reminder rows and bill-payment foreign keys. The chosen payment account is stored with the reminder after payment.
+- Verified both dialogs in the live app without submitting a payment. Screenshots: C:/Users/Mikey/.codex/visualizations/2026/10/20/01a15985-8084-7aa3-a33a-e8dc35b133f7/bill-reminder-no-account.png and C:/Users/Mikey/.codex/visualizations/2026/10/20/01a15985-8084-7aa3-a33a-e8dc35b133f7/bill-payment-account-choice.png.
+- `npm test`: 161 passed. Focused ESLint with the repo's pre-existing explicit-any rule suppressed, TypeScript `--noEmit`, and `git diff --check` passed.
+
+# Transaction Source in Details
+
+Date: October 20, 2026.
+
+- Removed the Source column from the desktop transactions table and source labels from compact rows. The View dialog now includes the transaction source alongside account and category details.
+- Verified the table headers no longer include Source and the selected transaction dialog shows Source: manual. Screenshots: C:/Users/Mikey/.codex/visualizations/2026/10/20/01a15985-8084-7aa3-a33a-e8dc35b133f7/transactions-without-source-column.png and C:/Users/Mikey/.codex/visualizations/2026/10/20/01a15985-8084-7aa3-a33a-e8dc35b133f7/transaction-source-in-dialog.png.
+- Focused ESLint, TypeScript `--noEmit`, and `git diff --check` passed.
+
+# Statement Type Column Padding
+
+Date: October 20, 2026.
+
+- Increased horizontal padding on the Type icon column in the statement-transactions table from 12px to 20px per side.
+- Verified the live Statements page visually. Screenshot: C:/Users/Mikey/.codex/visualizations/2026/10/20/01a15985-8084-7aa3-a33a-e8dc35b133f7/statement-type-column-padding.png.
+- `git diff --check` passed.
+
+# Statement Sale Date Column Padding
+
+Date: October 20, 2026.
+
+- Reduced horizontal padding on the Sale date column from 16px to 12px per side, leaving the Type column spacing unchanged.
+- Verified the live Statements page. Screenshot: C:/Users/Mikey/.codex/visualizations/2026/10/20/01a15985-8084-7aa3-a33a-e8dc35b133f7/statement-sale-date-padding.png.
+- `git diff --check` passed.
+
+# Three-Column Budget Cards
+
+Date: October 20, 2026.
+
+- Budget cards now use two columns at small-screen widths and three columns from the desktop `lg` breakpoint.
+- Verified the live Budgets page at desktop width. Screenshot: C:/Users/Mikey/.codex/visualizations/2026/10/20/01a15985-8084-7aa3-a33a-e8dc35b133f7/budgets-three-column-desktop.png.
+- Focused ESLint and `git diff --check` passed.

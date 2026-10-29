@@ -11,24 +11,24 @@ function account(owner: number, value: unknown) { const record = db.prepare("SEL
 function category(owner: number, value: unknown, kind: string) { const record = db.prepare("SELECT id FROM categories WHERE owner_id=? AND id=? AND kind=? AND archived_at IS NULL").get(owner, id(value), kind); if (!record) throw Error("Category unavailable or type mismatch"); return Number(value); }
 function audit(owner: number, action: string, entity: number) { db.prepare("INSERT INTO audit_events(owner_id,action,entity_id) VALUES(?,?,?)").run(owner, action, entity); }
 
-export function listBills(owner: number) { return db.prepare("SELECT b.*,a.name account_name,c.name category_name,p.transaction_id,t.posted_date payment_date,t.voided_at payment_voided FROM bills b JOIN accounts a ON a.id=b.account_id LEFT JOIN categories c ON c.id=b.category_id LEFT JOIN bill_payments p ON p.bill_id=b.id AND p.owner_id=b.owner_id LEFT JOIN transactions t ON t.id=p.transaction_id WHERE b.owner_id=? ORDER BY b.due_date,b.id").all(owner); }
+export function listBills(owner: number) { return db.prepare("SELECT b.*,a.name account_name,c.name category_name,p.transaction_id,t.posted_date payment_date,t.voided_at payment_voided FROM bills b LEFT JOIN accounts a ON a.id=b.account_id AND a.owner_id=b.owner_id LEFT JOIN categories c ON c.id=b.category_id LEFT JOIN bill_payments p ON p.bill_id=b.id AND p.owner_id=b.owner_id LEFT JOIN transactions t ON t.id=p.transaction_id WHERE b.owner_id=? ORDER BY b.due_date,b.id").all(owner); }
 export function saveBill(owner: number, body: any) {
  if (!body || typeof body !== "object") throw Error("Invalid bill");
- const name=text(body.name,80,true), amount=money(body.amount), due=date(body.dueDate), a=account(owner,body.accountId), cat=body.paymentKind==="credit_repayment"?null:category(owner,body.categoryId,"expense"), notes=text(body.notes??"",240);
- if(!["expense","credit_repayment"].includes(body.paymentKind??"expense")||body.paymentKind==="credit_repayment"&&a.type!=="credit_card")throw Error("Credit repayment requires a credit card");
+ const name=text(body.name,80,true), amount=money(body.amount), due=date(body.dueDate), paymentKind=body.paymentKind??"expense", a=body.accountId===undefined||body.accountId===null||body.accountId===""?null:account(owner,body.accountId), cat=paymentKind==="credit_repayment"?null:category(owner,body.categoryId,"expense"), notes=text(body.notes??"",240);
+ if(!["expense","credit_repayment"].includes(paymentKind)||paymentKind==="credit_repayment"&&a&&a.type!=="credit_card")throw Error("Credit repayment requires a credit card");
  if (!["once","monthly","quarterly","yearly"].includes(body.cadence)) throw Error("Invalid reminder preference");
  return atomic(()=>{let record:number;
- if(body.id!==undefined){record=id(body.id);if(db.prepare("SELECT 1 FROM bill_payments WHERE bill_id=? AND owner_id=?").get(record,owner))throw Error("Paid reminders cannot be edited");const changed=db.prepare("UPDATE bills SET name=?,amount=?,due_date=?,account_id=?,category_id=?,cadence=?,notes=?,payment_kind=? WHERE id=? AND owner_id=?").run(name,amount,due,a.id,cat,body.cadence,notes,body.paymentKind??"expense",record,owner);if(!changed.changes)throw Error("Bill unavailable");}
- else record=Number(db.prepare("INSERT INTO bills(owner_id,name,amount,due_date,account_id,category_id,cadence,notes,payment_kind) VALUES(?,?,?,?,?,?,?,?,?)").run(owner,name,amount,due,a.id,cat,body.cadence,notes,body.paymentKind??"expense").lastInsertRowid);
+ if(body.id!==undefined){record=id(body.id);if(db.prepare("SELECT 1 FROM bill_payments WHERE bill_id=? AND owner_id=?").get(record,owner))throw Error("Paid reminders cannot be edited");const changed=db.prepare("UPDATE bills SET name=?,amount=?,due_date=?,account_id=COALESCE(?,account_id),category_id=?,cadence=?,notes=?,payment_kind=? WHERE id=? AND owner_id=?").run(name,amount,due,a?.id??null,cat,body.cadence,notes,paymentKind,record,owner);if(!changed.changes)throw Error("Bill unavailable");}
+ else record=Number(db.prepare("INSERT INTO bills(owner_id,name,amount,due_date,account_id,category_id,cadence,notes,payment_kind) VALUES(?,?,?,?,?,?,?,?,?)").run(owner,name,amount,due,a?.id??null,cat,body.cadence,notes,paymentKind).lastInsertRowid);
  audit(owner,"bill.save",record);return{id:record};});
 }
 export function payBill(owner: number, body: any) {
  if(!body||typeof body!=="object")throw Error("Invalid payment");const billId=id(body.billId),posted=date(body.date);
- return atomic(()=>{const bill=db.prepare("SELECT * FROM bills WHERE id=? AND owner_id=?").get(billId,owner) as {id:number;name:string;amount:number;account_id:number;category_id:number;payment_kind:string}|undefined;if(!bill)throw Error("Bill unavailable");
+ return atomic(()=>{const bill=db.prepare("SELECT * FROM bills WHERE id=? AND owner_id=?").get(billId,owner) as {id:number;name:string;amount:number;account_id:number|null;category_id:number|null;payment_kind:string}|undefined;if(!bill)throw Error("Bill unavailable");
  const previous=db.prepare("SELECT transaction_id FROM bill_payments WHERE bill_id=? AND owner_id=?").get(billId,owner) as {transaction_id:number}|undefined;if(previous)return{id:previous.transaction_id,duplicate:true};
- const a=account(owner,bill.account_id);let source=a.id,counter:number|undefined;
+ const accountId=body.accountId??bill.account_id;if(accountId===null||accountId===undefined||accountId==="")throw Error("Choose an account for this payment");const a=account(owner,accountId);let source=a.id,counter:number|undefined;
  if(bill.payment_kind==="credit_repayment"){if(a.type!=="credit_card")throw Error("Credit repayment account unavailable");const funding=account(owner,body.fundingAccountId);if(!["cash","bank","wallet"].includes(funding.type)||funding.id===a.id)throw Error("Select a distinct cash, bank, or wallet funding account");source=funding.id;counter=a.id;}
- const tx=createTransaction(owner,{kind:counter?"transfer":"expense",date:posted,amount:bill.amount,accountId:source,counterAccountId:counter,categoryId:counter?undefined:bill.category_id,description:bill.name,idempotencyKey:`bill:${billId}:payment:${randomUUID()}`});
+ const tx=createTransaction(owner,{kind:counter?"transfer":"expense",date:posted,amount:bill.amount,accountId:source,counterAccountId:counter,categoryId:counter?undefined:bill.category_id,description:bill.name,idempotencyKey:`bill:${billId}:payment:${randomUUID()}`});db.prepare("UPDATE bills SET account_id=? WHERE owner_id=? AND id=?").run(a.id,owner,billId);
  db.prepare("INSERT INTO bill_payments(bill_id,owner_id,transaction_id) VALUES(?,?,?)").run(billId,owner,tx.id);audit(owner,"bill.payment",billId);return{...tx,duplicate:false};});
 }
 export function listGoals(owner: number) { const goals=db.prepare("SELECT g.*,COALESCE((SELECT SUM(amount) FROM goal_contributions WHERE goal_id=g.id AND owner_id=g.owner_id),0) allocated FROM goals g WHERE g.owner_id=? ORDER BY g.id DESC").all(owner) as any[];return goals.map(g=>{const record={...g,contributions:db.prepare("SELECT * FROM goal_contributions WHERE owner_id=? AND goal_id=? ORDER BY posted_date DESC,id DESC").all(owner,g.id)};return{...record,version:createHash("sha256").update(JSON.stringify(record)).digest("hex")};}); }
@@ -39,6 +39,25 @@ export function saveGoal(owner: number, body: any) {
 export function contribute(owner: number, body: any) {
  if(!body||typeof body!=="object")throw Error("Invalid allocation");const goal=id(body.goalId),amount=money(body.amount),posted=date(body.date),notes=text(body.notes??"",240),key=text(body.requestKey,100,true);if(posted>new Date().toISOString().slice(0,10))throw Error("Allocation date cannot be in the future");
  return atomic(()=>{if(!db.prepare("SELECT 1 FROM goals WHERE id=? AND owner_id=?").get(goal,owner))throw Error("Goal unavailable");const previous=db.prepare("SELECT id,goal_id,amount,posted_date,notes FROM goal_contributions WHERE owner_id=? AND request_key=?").get(owner,key) as any;if(previous){if(previous.goal_id!==goal||previous.amount!==amount||previous.posted_date!==posted||previous.notes!==notes)throw Error("Request key already used for another allocation");return{id:previous.id,duplicate:true};}const total=(db.prepare("SELECT COALESCE(SUM(amount),0) n FROM goal_contributions WHERE owner_id=? AND goal_id=?").get(owner,goal) as {n:number}).n;if(!Number.isSafeInteger(total+amount))throw Error("Total allocation is too large");const record=Number(db.prepare("INSERT INTO goal_contributions(owner_id,goal_id,amount,posted_date,notes,request_key) VALUES(?,?,?,?,?,?)").run(owner,goal,amount,posted,notes,key).lastInsertRowid);audit(owner,"goal.contribute",record);return{id:record,duplicate:false};});
+}
+export function deleteGoalContribution(owner:number,record:number,goalRecord:number,expected:string){return atomic(()=>{
+ const goalId=id(goalRecord),contributionId=id(record),goal=listGoals(owner).find(g=>g.id===goalId);if(!goal)throw Error("Goal unavailable");
+ if(goal.version!==expected)throw Error("This goal changed. Reload and review before deleting.");
+ if(!db.prepare("SELECT 1 FROM goal_contributions WHERE id=? AND owner_id=? AND goal_id=?").get(contributionId,owner,goalId))throw Error("Contribution unavailable");
+ if(!db.prepare("DELETE FROM goal_contributions WHERE id=? AND owner_id=? AND goal_id=?").run(contributionId,owner,goalId).changes)throw Error("Contribution unavailable");
+ audit(owner,"goal.contribution.delete",contributionId);return{ok:true};
+});}
+export function editGoalContribution(owner:number,record:number,goalRecord:number,expected:string,body:unknown){
+ if(!body||typeof body!=="object"||Array.isArray(body))throw Error("Invalid contribution");
+ const payload=body as Record<string,unknown>,goalId=id(goalRecord),contributionId=id(record),amount=money(payload.amount),posted=date(payload.date),notes=text(payload.notes??"",240);
+ if(posted>new Date().toISOString().slice(0,10))throw Error("Contribution date cannot be in the future");
+ return atomic(()=>{
+  const goal=listGoals(owner).find(g=>g.id===goalId);if(!goal)throw Error("Goal unavailable");
+  if(goal.version!==expected)throw Error("This goal changed. Reload and review before editing.");
+  if(!db.prepare("SELECT 1 FROM goal_contributions WHERE id=? AND owner_id=? AND goal_id=?").get(contributionId,owner,goalId))throw Error("Contribution unavailable");
+  if(!db.prepare("UPDATE goal_contributions SET amount=?,posted_date=?,notes=? WHERE id=? AND owner_id=? AND goal_id=?").run(amount,posted,notes,contributionId,owner,goalId).changes)throw Error("Contribution unavailable");
+  audit(owner,"goal.contribution.edit",contributionId);return{ok:true};
+ });
 }
 export function preferences(owner: number) { return db.prepare("SELECT shortcuts,bill_alerts,budget_alerts,goal_alerts,default_transaction_currency FROM workspace_preferences WHERE owner_id=?").get(owner) ?? {shortcuts:1,bill_alerts:1,budget_alerts:1,goal_alerts:1,default_transaction_currency:"PHP"}; }
 export function savePreferences(owner: number, body: any) {

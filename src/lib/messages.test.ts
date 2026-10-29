@@ -3,6 +3,12 @@ import {test} from "node:test";
 import {api, ApiError, downloadExport} from "./api.ts";
 import {clearMessage, networkMessage, requestMessage} from "./messages.ts";
 
+test("exact statement failures keep ownership-safe actionable selection errors", () => {
+  assert.match(requestMessage(400,{message:"Statement unavailable for this account"},"credit-card-dashboard?issuedStatement=9"),/^Statement unavailable for this account\. Choose an owned/);
+  assert.match(requestMessage(400,{statusMessage:"Dashboard unavailable; retry or review filters"},"credit-card-dashboard"),/Choose valid statement filters/);
+  assert.equal(requestMessage(400,{message:"Choose a valid statement ID."},"credit-card-dashboard"),"Choose a valid statement ID.");
+});
+
 test("sign-in errors use H3 and legacy response fields without HTTP codes", () => {
   for (const field of ["statusMessage", "statusText", "message"]) {
     const text = requestMessage(400, {[field]: "Invalid username or password"}, "auth/login", "POST");
