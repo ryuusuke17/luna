@@ -54,7 +54,7 @@ export function CreditCardActivityFilters({categories=[],params,onFilter,onApply
 }
 
 export function CreditCardDashboardFilters({cards,months,statements,hasMoreStatements,loadingMoreStatements,onLoadMoreStatements,params,categories,onFilter,onApply}:GlobalFilterProps){
- const [open,setOpen]=useState(false),[draft,setDraft]=useState(()=>new URLSearchParams(params));
+ const [open,setOpen]=useState(false),[draft,setDraft]=useState(()=>new URLSearchParams(params)),descId=useId();
  const activeCount=["lineAmount","lineCurrency","lineType","category","start","end","lineSort"].filter(key=>params.has(key)&&!(key==="lineSort"&&params.get(key)==="source")).length;
  const updateDraft=(key:string,value:string)=>setDraft(current=>{const next=new URLSearchParams(current);if(value)next.set(key,value);else next.delete(key);return next;});
  const reset=()=>{const next=new URLSearchParams(params);for(const key of ["lineAmount","lineCurrency","lineType","category","start","end","lineSort","linePage"])next.delete(key);setDraft(next);onApply(next);setOpen(false);};
@@ -67,7 +67,8 @@ export function CreditCardDashboardFilters({cards,months,statements,hasMoreState
    <label className="min-w-44 flex-[2_1_18rem]"><span className="sr-only">Merchant / notes</span><input className="field" aria-label="Merchant / notes" type="search" maxLength={200} placeholder="Merchant / notes" value={params.get("lineSearch")??""} onChange={event=>onFilter("lineSearch",event.target.value)}/></label>
    <Popover open={open} onOpenChange={value=>{setOpen(value);if(value)setDraft(new URLSearchParams(params));}}>
     <PopoverTrigger asChild><Button variant="outline" className="shrink-0" aria-label="More activity filters">Filters{activeCount?` · ${activeCount}`:""}</Button></PopoverTrigger>
-    <PopoverContent align="end" className="w-[min(42rem,calc(100vw-2rem))] p-3 sm:p-4">
+    <PopoverContent align="end" className="w-[min(42rem,calc(100vw-2rem))] p-3 sm:p-4" aria-label="Activity line filters" aria-describedby={descId}>
+     <p id={descId} className="sr-only">Filter statement lines by type, category and post date.</p>
      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       <label>Line type<select className="field" value={draft.get("lineType")??""} onChange={event=>updateDraft("lineType",event.target.value)}><option value="">All types</option><option value="charge">Charges</option><option value="payment">Payment candidates</option><option value="credit">All credits</option><option value="installment">Installments</option><option value="other">Other</option></select></label>
       <label>Category<select className="field" value={draft.get("category")??""} onChange={event=>updateDraft("category",event.target.value)}><option value="">All categories</option>{draft.get("category")&&!categories.includes(draft.get("category")!)&&<option>{draft.get("category")}</option>}{categories.map(category=><option key={category}>{category}</option>)}</select></label>

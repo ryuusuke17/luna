@@ -31,7 +31,7 @@ export default function MonthControl({month,onChange}:{month:string;onChange:(mo
     <ChevronRight aria-hidden="true"/>
    </Button>
   </div>
-  <PopoverContent align="start" collisionPadding={16} className="max-h-[var(--radix-popover-content-available-height)] w-[min(22rem,calc(100vw-2rem))] overflow-y-auto rounded-xl p-5 shadow-none" aria-labelledby={`${id}-title`}>
+  <PopoverContent align="start" collisionPadding={16} className="max-h-[var(--radix-popover-content-available-height)] w-[min(22rem,calc(100vw-2rem))] overflow-y-auto rounded-xl p-5 shadow-none" aria-labelledby={`${id}-title`} aria-describedby={`${id}-hint`}>
    <form noValidate onSubmit={event=>{
     event.preventDefault();
     if(!isCalendarDate(`${draft}-01`)){

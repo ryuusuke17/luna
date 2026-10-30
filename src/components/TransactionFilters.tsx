@@ -104,7 +104,7 @@ export default function TransactionFilters({params, accounts, categories, onChan
         </Button>
       </div>
       {activityToolbar}
-      <PopoverContent align="start" collisionPadding={16} className="max-h-[var(--radix-popover-content-available-height)] w-[min(22rem,calc(100vw-2rem))] overflow-y-auto rounded-xl p-5 shadow-none" aria-label="Date filter" aria-labelledby={dateTitle}>
+      <PopoverContent align="start" collisionPadding={16} className="max-h-[var(--radix-popover-content-available-height)] w-[min(22rem,calc(100vw-2rem))] overflow-y-auto rounded-xl p-5 shadow-none" aria-label="Date filter" aria-labelledby={dateTitle} aria-describedby={`${dateTitle}-desc`}>
         <form noValidate onSubmit={event => {
           event.preventDefault();
           try {
@@ -116,7 +116,7 @@ export default function TransactionFilters({params, accounts, categories, onChan
           }
         }}>
           <h2 id={dateTitle} className="text-lg font-semibold">Date filter</h2>
-          <p className="mb-4 mt-1 text-sm text-muted-foreground">{manualOnly ? "Choose posted dates." : "Choose statement activity or posted dates."}</p>
+          <p id={`${dateTitle}-desc`} className="mb-4 mt-1 text-sm text-muted-foreground">{manualOnly ? "Choose posted dates." : "Choose statement activity or posted dates."}</p>
           <label className="block">Date mode
             <select className="field" value={dateDraft.mode} onChange={event => {
               setDateDraft({...dateDraft, mode: event.target.value as TransactionDateFilter["mode"]});

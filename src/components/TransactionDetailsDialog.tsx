@@ -2,7 +2,7 @@ import type {ReactNode} from "react";
 import {useId} from "react";
 import DialogContent from "@/components/WorkspaceDialogContent";
 import TransactionTypeIcon from "@/components/TransactionTypeIcon";
-import {Dialog,DialogHeader,DialogTitle} from "@/components/ui/dialog";
+import {Dialog,DialogDescription,DialogHeader,DialogTitle} from "@/components/ui/dialog";
 import {formatMoney} from "@/lib/finance";
 
 export type TransactionDetailField={label:string;value:ReactNode;className?:string};
@@ -24,8 +24,8 @@ type Props={
 export default function TransactionDetailsDialog({open,onOpenChange,title,amount,currency="PHP",type,typeLabel,amountBreakdown,details,supplemental,actions}:Props){
  const breakdownId=useId(),detailsId=useId();
  return <Dialog open={open} onOpenChange={onOpenChange}>
-  <DialogContent className="transaction-details-dialog" aria-describedby={undefined}>
-   <DialogHeader><DialogTitle className="text-xl leading-snug">{title}</DialogTitle></DialogHeader>
+  <DialogContent className="transaction-details-dialog">
+   <DialogHeader><DialogTitle className="text-xl leading-snug">{title}</DialogTitle><DialogDescription className="sr-only">Amount, breakdown and record details.</DialogDescription></DialogHeader>
    <div className="space-y-5">
     <section aria-label="Transaction amount" className="rounded-lg border bg-secondary p-4 sm:p-5">
      <p className="text-3xl font-semibold tabular-nums">{formatMoney(amount,currency)}</p>

@@ -78,6 +78,7 @@
   "name": "vite_react_shadcn_ts",
   "private": true,
   "scripts": {
+    "audit:pages": "node scripts/audit-pages.mjs",
     "build": "npm run test && vite build",
     "build:dev": "vite build --mode development",
     "dev": "vite",

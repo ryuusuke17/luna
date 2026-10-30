@@ -1,4 +1,4 @@
-import {useEffect,useRef,useState} from "react";
+import {useEffect,useId,useRef,useState} from "react";
 import {Link,useLocation,useSearchParams} from "react-router-dom";
 import {useInfiniteQuery,useQuery} from "@tanstack/react-query";
 import {Button} from "@/components/WorkspaceButton";
@@ -21,7 +21,7 @@ const choiceSentinel="__load_older__";
 type StatementFiltersProps={params:URLSearchParams;dashboard?:CreditDashboard;issues:StatementDashboard["items"];hasMore:boolean;loadingMore:boolean;onLoadMore:()=>void;onApply:(draft:URLSearchParams)=>void};
 
 function StatementFilterBar({params,dashboard,issues,hasMore,loadingMore,onLoadMore,onApply}:StatementFiltersProps){
- const [open,setOpen]=useState(false),[draft,setDraft]=useState(()=>new URLSearchParams(params));
+ const [open,setOpen]=useState(false),[draft,setDraft]=useState(()=>new URLSearchParams(params)),descId=useId();
  const parameterText=params.toString();
  useEffect(()=>{if(!open)setDraft(new URLSearchParams(parameterText));},[parameterText,open]);
  const activeCount=statementFilterKeys.filter(key=>params.has(key)&&!(key==="sort"&&params.get(key)==="newest")).length;
@@ -39,7 +39,8 @@ function StatementFilterBar({params,dashboard,issues,hasMore,loadingMore,onLoadM
    <label className="min-w-48 flex-[1_1_24rem]"><span className="sr-only">Search statement metadata</span><input className="field" aria-label="Search statement metadata" type="search" maxLength={200} placeholder="Search statements by account, title, or filename" value={draft.get("search")??""} onChange={event=>setDraftValue("search",event.target.value)}/></label>
    <Popover open={open} onOpenChange={value=>{setOpen(value);if(value)setDraft(new URLSearchParams(params));}}>
     <PopoverTrigger asChild><Button variant="outline" aria-label="More statement filters">Filters{activeCount?` · ${activeCount}`:""}</Button></PopoverTrigger>
-    <PopoverContent align="end" className="w-[min(48rem,calc(100vw-2rem))] p-3 sm:p-4">
+    <PopoverContent align="end" className="w-[min(48rem,calc(100vw-2rem))] p-3 sm:p-4" aria-label="Statement catalog filters" aria-describedby={descId}>
+     <p id={descId} className="sr-only">Filter statements by issue date, issuer, card, payment status and due date.</p>
      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       <label className="min-w-0 sm:col-span-2 lg:col-span-3">Statement<select className="field" aria-label="Statement" value={selected} onChange={event=>{if(event.target.value===choiceSentinel){onLoadMore();return;}setDraftValue("issuedStatement",event.target.value);}}><option value="">All statements</option>{selected&&!known&&<option value={selected}>Loading selected statement (#{selected})</option>}{issues.map(issue=><option key={issue.id} value={issue.id}>{issue.card_name} · {issue.statement_date} · {issue.currency} · {issue.filename} (#{issue.id})</option>)}{hasMore&&<option value={choiceSentinel}>{loadingMore?"Loading older statements…":"Load older statements…"}</option>}</select></label>
       <label>Issue month<select className="field" value={draft.get("month")??""} onChange={event=>setDraftValue("month",event.target.value)}><option value="">All months</option>{draft.get("month")&&!dashboard?.availableMonths.includes(draft.get("month")!)&&<option value={draft.get("month")!}>{statementMonthLabel(draft.get("month")!)}</option>}{dashboard?.availableMonths.map(month=><option key={month} value={month}>{statementMonthLabel(month)}</option>)}</select></label>

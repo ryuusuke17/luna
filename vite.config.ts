@@ -9,6 +9,12 @@ export default defineConfig(() => ({
   server: {
     host: "::",
     port: 8080,
+    hmr: {
+      overlay: false,
+    },
+    watch: {
+      ignored: ["**/test-results/**", "**/data/**"],
+    },
   },
   plugins: [dyadComponentTagger(), react(), nitro()],
   resolve: {
